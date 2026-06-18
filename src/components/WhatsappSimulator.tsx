@@ -5,6 +5,8 @@ import {
   FileText, AlertTriangle, Clock, CheckCircle2, Circle, Zap
 } from 'lucide-react';
 import type { Shade, Owner, Invoice, WhatsAppMessage, SystemSettings } from '../types';
+import { CustomDropdown } from './CustomDropdown';
+import type { DropdownOption } from './CustomDropdown';
 
 interface WhatsappSimulatorProps {
   shades: Shade[];
@@ -88,6 +90,31 @@ const buildSimSteps = (graceDays: number, penaltyPerDay: number, reminderDaysBef
   ];
 };
 
+// ── WhatsApp markdown renderer ─────────────────────────────────────────
+function renderWAText(text: string): React.ReactNode {
+  const segments: React.ReactNode[] = [];
+  const regex = /(\*[^*]+\*|_[^_]+_|~[^~]+~)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > last) segments.push(text.slice(last, match.index));
+    const raw = match[0];
+    if (raw.startsWith('*') && raw.endsWith('*')) {
+      segments.push(<strong key={key++}>{raw.slice(1, -1)}</strong>);
+    } else if (raw.startsWith('_') && raw.endsWith('_')) {
+      segments.push(<em key={key++}>{raw.slice(1, -1)}</em>);
+    } else if (raw.startsWith('~') && raw.endsWith('~')) {
+      segments.push(<del key={key++}>{raw.slice(1, -1)}</del>);
+    } else {
+      segments.push(raw);
+    }
+    last = match.index + raw.length;
+  }
+  if (last < text.length) segments.push(text.slice(last));
+  return segments;
+}
+
 // ── Phone screen component ──────────────────────────────────────────────
 const PhoneScreen: React.FC<{
   personName: string;
@@ -98,7 +125,8 @@ const PhoneScreen: React.FC<{
   onSend: (e: React.FormEvent) => void;
   onPayClick: (invoiceId: string) => void;
   ownerInvoice: Invoice | null;
-}> = ({ personName, personType, chatMessages, typedMessage, setTypedMessage, onSend, onPayClick, ownerInvoice }) => {
+  settings?: SystemSettings;
+}> = ({ personName, personType, chatMessages, typedMessage, setTypedMessage, onSend, onPayClick, ownerInvoice, settings }) => {
   const chatBodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -152,22 +180,30 @@ const PhoneScreen: React.FC<{
                 return (
                   <div key={m.id} className="wa-msg-bubble incoming">
                     <div className="wa-msg-text" style={{ whiteSpace: 'pre-wrap', fontSize: '9.5px', lineHeight: '1.5' }}>
-                      {text}
+                      {renderWAText(text)}
                     </div>
-                    {hasQR && (
-                      <div style={{ marginTop: '6px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ fontSize: '7px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Scan to Pay</div>
-                        <div style={{ width: '64px', height: '64px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', fontSize: '9px', color: '#64748b', textAlign: 'center', border: '1px dashed #cbd5e1' }}>
-                          📱<br />UPI QR
+                    {hasQR && (() => {
+                      const upiId = settings?.upiId || 'fortunepark@upi';
+                      const societyName = settings?.societyName || 'Fortune Industrial Park';
+                      const amount = ownerInvoice?.totalAmount || 0;
+                      const invoiceId = m.invoiceId || ownerInvoice?.id || '';
+                      const upiLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(societyName)}&am=${amount}&cu=INR&tn=${encodeURIComponent('Invoice-' + invoiceId)}`;
+                      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(upiLink)}`;
+                      return (
+                        <div style={{ marginTop: '6px', backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ fontSize: '7px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase' }}>Scan to Pay</div>
+                          <div style={{ width: '100px', height: '100px', backgroundColor: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', border: '1px solid var(--border-color)', padding: '4px' }}>
+                            <img src={qrUrl} alt="UPI QR" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                          </div>
+                          <button
+                            onClick={() => onPayClick(invoiceId)}
+                            style={{ width: '100%', padding: '5px', backgroundColor: '#1259c3', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '700', fontSize: '8px' }}
+                          >
+                            Pay ₹{amount || '—'} Online
+                          </button>
                         </div>
-                        <button
-                          onClick={() => onPayClick(m.invoiceId || ownerInvoice?.id || '')}
-                          style={{ width: '100%', padding: '5px', backgroundColor: '#1259c3', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '700', fontSize: '8px' }}
-                        >
-                          Pay ₹{ownerInvoice?.totalAmount || '—'} Online
-                        </button>
-                      </div>
-                    )}
+                      );
+                    })()}
                     {hasPDF && (
                       <div style={{ marginTop: '6px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '5px', padding: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <div style={{ width: '22px', height: '22px', backgroundColor: '#fee2e2', color: '#ef4444', borderRadius: '3px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '800', fontSize: '7px', flexShrink: 0 }}>PDF</div>
@@ -212,15 +248,6 @@ export const WhatsappSimulator: React.FC<WhatsappSimulatorProps> = ({
 
   const [ownerTyped, setOwnerTyped] = useState('');
   const [renterTyped, setRenterTyped] = useState('');
-  const [checkoutInvoice, setCheckoutInvoice] = useState<Invoice | null>(null);
-  const [razorpayTab, setRazorpayTab] = useState<'methods' | 'upi' | 'card' | 'netbanking'>('methods');
-  const [upiIdInput, setUpiIdInput] = useState('');
-  const [cardNo, setCardNo] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvv, setCardCvv] = useState('');
-  const [cardName, setCardName] = useState('');
-  const [selectedBank, setSelectedBank] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [simStep, setSimStep] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
@@ -279,29 +306,43 @@ export const WhatsappSimulator: React.FC<WhatsappSimulatorProps> = ({
 
   const formatCurrency = (v: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v);
 
-  const openCheckout = (invoiceId: string) => {
+  const handlePayOnline = (invoiceId: string) => {
     const inv = invoices.find(i => i.id === invoiceId) || shadeInvoice;
-    if (inv) { setCheckoutInvoice(inv); setRazorpayTab('methods'); setUpiIdInput(''); setCardNo(''); setCardExpiry(''); setCardCvv(''); setCardName(''); setSelectedBank(''); setIsProcessing(false); }
-  };
+    if (!inv) return;
 
-  const executePayment = () => {
-    if (!checkoutInvoice) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      onSimulatePayment(checkoutInvoice.id);
-      const receipt = `KIN-RCP-${Math.floor(Math.random() * 9000) + 1000}`;
-      const msg = (name: string) => `[PDF Receipt]🏭 *Fortune Industrial Park*\n✅ *Payment Confirmed*\n\nDear *${name}*,\nAmount Paid: *${formatCurrency(checkoutInvoice.totalAmount)}*\n📅 ${new Date().toLocaleDateString('en-IN')}\n🧾 Receipt: ${receipt}\n\nYour account is now clear! 🙏\n\n_Fortune Industrial Park_`;
-      if (ownerPerson) onSendMessage(ownerPerson.phone, msg(ownerPerson.name));
-      if (renterPerson) setTimeout(() => onSendMessage(renterPerson.phone, msg(renterPerson.name)), 400);
-      setIsProcessing(false);
-      setCheckoutInvoice(null);
-    }, 1500);
+    const upiId = settings?.upiId || 'fortunepark@upi';
+    const societyName = settings?.societyName || 'Fortune Industrial Park';
+    const amount = inv.totalAmount;
+    const upiLink = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(societyName)}&am=${amount}&cu=INR&tn=${encodeURIComponent('Invoice-' + inv.id)}`;
+    
+    // Redirect directly to the available UPI app on phone
+    window.location.href = upiLink;
+
+    // Simulate completion on system as well for simulator responsiveness
+    onSimulatePayment(inv.id);
+    const receipt = `KIN-RCP-${Math.floor(Math.random() * 9000) + 1000}`;
+    const msg = (name: string) => `[PDF Receipt]🏭 *Fortune Industrial Park*\n✅ *Payment Confirmed*\n\nDear *${name}*,\nAmount Paid: *${formatCurrency(inv.totalAmount)}*\n📅 ${new Date().toLocaleDateString('en-IN')}\n🧾 Receipt: ${receipt}\n\nYour account is now clear! 🙏\n\n_Fortune Industrial Park_`;
+    
+    if (ownerPerson) onSendMessage(ownerPerson.phone, msg(ownerPerson.name));
+    if (renterPerson) setTimeout(() => onSendMessage(renterPerson.phone, msg(renterPerson.name)), 400);
   };
 
   const allDone = simStep >= SIM_STEPS.length;
   const nextStep = !allDone ? SIM_STEPS[simStep] : null;
 
   const occupiedShades = shades.filter(s => s.status === 'occupied');
+  const shadeOptions: DropdownOption[] = (occupiedShades.length > 0 ? occupiedShades : shades).map(s => {
+    const owner = owners.find(o => o.id === s.ownerId);
+    const renter = s.renterId ? owners.find(o => o.id === s.renterId) : null;
+    const parts: string[] = [];
+    if (owner) parts.push(`Owner: ${owner.name}`);
+    if (renter) parts.push(`Renter: ${renter.name}`);
+    return {
+      value: s.id,
+      label: `${s.id} — ${s.block} · ${s.floor}`,
+      subLabel: parts.length > 0 ? parts.join(' · ') : 'No occupants',
+    };
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -311,21 +352,14 @@ export const WhatsappSimulator: React.FC<WhatsappSimulatorProps> = ({
         <div className="card-body" style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div className="form-group" style={{ margin: 0, flex: '1', minWidth: '220px' }}>
             <label style={{ fontWeight: '700' }}>Select Shade to Simulate:</label>
-            <select
-              className="form-control"
-              value={selectedShadeId}
-              onChange={e => { setSelectedShadeId(e.target.value); resetSim(); }}
-            >
-              {(occupiedShades.length > 0 ? occupiedShades : shades).map(s => {
-                const owner = owners.find(o => o.id === s.ownerId);
-                const renter = s.renterId ? owners.find(o => o.id === s.renterId) : null;
-                return (
-                  <option key={s.id} value={s.id}>
-                    {s.id} — {s.block} · {s.floor}{owner ? `  |  Owner: ${owner.name}` : ''}{renter ? `  ·  Renter: ${renter.name}` : ''}
-                  </option>
-                );
-              })}
-            </select>
+            <CustomDropdown
+              options={shadeOptions}
+              selectedValue={selectedShadeId}
+              onChange={v => { setSelectedShadeId(v); resetSim(); }}
+              placeholder="Select a shade..."
+              searchPlaceholder="Search by shade, block, owner..."
+              sortMode="numeric-id"
+            />
           </div>
 
           {/* Info chips */}
@@ -451,33 +485,6 @@ export const WhatsappSimulator: React.FC<WhatsappSimulatorProps> = ({
             </div>
           </div>
 
-          {/* PRD feature coverage */}
-          <div className="card">
-            <div className="card-header"><h3>Automation Coverage</h3></div>
-            <div className="card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                {[
-                  { icon: '📄', title: 'Invoice Dispatch', desc: 'Bill + QR code on generation' },
-                  { icon: '⏰', title: `${reminderDaysBefore[0] ?? 3}-Day Reminder`, desc: 'Before due date alert' },
-                  { icon: '⚠️', title: '1-Day Urgent', desc: 'Final alert before due' },
-                  { icon: '🚨', title: 'Overdue Alerts', desc: 'Daily notices after due date' },
-                  { icon: '💸', title: 'Penalty Tracking', desc: `₹${penaltyPerDay}/day after ${graceDays}-day grace` },
-                  { icon: '🧾', title: 'Receipt on Payment', desc: 'Sent to Owner + Renter instantly' },
-                ].map(f => (
-                  <div key={f.title} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', padding: '8px', backgroundColor: 'var(--bg-main)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                    <span style={{ fontSize: '16px', lineHeight: 1 }}>{f.icon}</span>
-                    <div>
-                      <div style={{ fontWeight: '700', fontSize: '11px', color: 'var(--text-primary)' }}>{f.title}</div>
-                      <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '1px' }}>{f.desc}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: '10px', padding: '8px 12px', backgroundColor: '#fefce8', border: '1px solid #fde68a', borderRadius: 'var(--radius-md)', fontSize: '11px', color: '#92400e' }}>
-                📌 Connect <strong>WhatsApp Business API</strong> in Settings to activate real delivery. Grace period, penalty rate & reminder schedule are all configurable in Settings.
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Right: Dual Phone Screens */}
@@ -491,8 +498,9 @@ export const WhatsappSimulator: React.FC<WhatsappSimulatorProps> = ({
               typedMessage={ownerTyped}
               setTypedMessage={setOwnerTyped}
               onSend={e => { e.preventDefault(); if (ownerTyped.trim()) { onSendMessage(ownerPerson.phone, ownerTyped); setOwnerTyped(''); } }}
-              onPayClick={openCheckout}
+              onPayClick={handlePayOnline}
               ownerInvoice={shadeInvoice}
+              settings={settings}
             />
           ) : (
             <div style={{ width: '200px', textAlign: 'center', padding: '40px 16px', backgroundColor: 'var(--bg-main)', border: '2px dashed var(--border-color)', borderRadius: 'var(--radius-lg)', color: 'var(--text-secondary)', fontSize: '12px' }}>
@@ -509,8 +517,9 @@ export const WhatsappSimulator: React.FC<WhatsappSimulatorProps> = ({
               typedMessage={renterTyped}
               setTypedMessage={setRenterTyped}
               onSend={e => { e.preventDefault(); if (renterTyped.trim()) { onSendMessage(renterPerson.phone, renterTyped); setRenterTyped(''); } }}
-              onPayClick={openCheckout}
+              onPayClick={handlePayOnline}
               ownerInvoice={shadeInvoice}
+              settings={settings}
             />
           ) : (
             <div style={{ width: '200px', textAlign: 'center', padding: '40px 16px', backgroundColor: 'var(--bg-main)', border: '2px dashed var(--border-color)', borderRadius: 'var(--radius-lg)', color: 'var(--text-secondary)', fontSize: '12px' }}>
@@ -520,113 +529,6 @@ export const WhatsappSimulator: React.FC<WhatsappSimulatorProps> = ({
         </div>
       </div>
 
-      {/* ── Razorpay Checkout Modal ── */}
-      {checkoutInvoice && (
-        <div className="modal-overlay" style={{ zIndex: 1050, backgroundColor: 'rgba(0,0,0,0.6)' }}>
-          <div className="modal-content" style={{ maxWidth: '380px', borderRadius: '10px', overflow: 'hidden', padding: 0, border: 'none' }}>
-            <div style={{ backgroundColor: '#0f1c3f', color: '#fff', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Payment Gateway</div>
-                <div style={{ fontSize: '15px', fontWeight: '800' }}>Fortune Industrial Park</div>
-                <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.5)', fontFamily: 'monospace' }}>Ref: {checkoutInvoice.id}</div>
-              </div>
-              <button onClick={() => setCheckoutInvoice(null)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: '22px', lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ backgroundColor: '#17274f', padding: '8px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#fff' }}>
-              <span style={{ opacity: 0.7 }}>Amount to Pay:</span>
-              <strong style={{ fontSize: '15px', color: '#3395ff' }}>{formatCurrency(checkoutInvoice.totalAmount)}</strong>
-            </div>
-
-            {isProcessing ? (
-              <div className="modal-body" style={{ padding: '40px 24px', textAlign: 'center', minHeight: '180px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ border: '4px solid rgba(51,149,255,0.15)', borderTop: '4px solid #3395ff', borderRadius: '50%', width: '44px', height: '44px', animation: 'logoPulse 1s linear infinite', marginBottom: '14px' }} />
-                <div style={{ fontWeight: '700', fontSize: '15px' }}>Authorizing Payment…</div>
-                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '6px' }}>Securely connecting to bank…</div>
-              </div>
-            ) : (
-              <div className="modal-body" style={{ padding: '18px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', backgroundColor: '#f1f5f9', borderRadius: '6px', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                  <span>👤 {checkoutInvoice.ownerName}</span><span>📞 {checkoutInvoice.ownerPhone}</span>
-                </div>
-
-                {razorpayTab === 'methods' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Choose Payment Method</div>
-                    {[
-                      { tab: 'upi' as const, icon: '⚡', title: 'UPI / QR Code', sub: 'Google Pay, PhonePe, Paytm, BHIM' },
-                      { tab: 'card' as const, icon: '💳', title: 'Debit / Credit Card', sub: 'Visa, MasterCard, RuPay' },
-                      { tab: 'netbanking' as const, icon: '🏦', title: 'Net Banking', sub: 'All Indian banks supported' },
-                    ].map(opt => (
-                      <button key={opt.tab} onClick={() => setRazorpayTab(opt.tab)} style={{ width: '100%', padding: '12px 14px', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', background: '#fff', cursor: 'pointer', textAlign: 'left' }}>
-                        <span style={{ fontSize: '18px' }}>{opt.icon}</span>
-                        <div><strong style={{ fontSize: '13px', display: 'block' }}>{opt.title}</strong><span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{opt.sub}</span></div>
-                        <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>›</span>
-                      </button>
-                    ))}
-                    <button className="btn btn-secondary" onClick={() => setCheckoutInvoice(null)} style={{ width: '100%', justifyContent: 'center', marginTop: '6px' }}>Cancel</button>
-                  </div>
-                )}
-
-                {razorpayTab === 'upi' && (
-                  <div>
-                    <button onClick={() => setRazorpayTab('methods')} style={{ border: 'none', background: 'none', color: '#1351b6', cursor: 'pointer', fontWeight: '700', fontSize: '12px', marginBottom: '12px' }}>← Back</button>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                      <div style={{ padding: '10px', border: '1px solid var(--border-color)', borderRadius: '8px', backgroundColor: '#fff', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ width: '90px', height: '90px', backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', fontSize: '11px', color: '#64748b', textAlign: 'center', border: '1px dashed #cbd5e1' }}>📱<br />QR Code<br />(UPI)</div>
-                        <span style={{ fontSize: '9px', color: 'var(--text-secondary)', fontWeight: '700' }}>SCAN TO PAY</span>
-                      </div>
-                      <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                        <span style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)' }} /><span>OR</span><span style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)' }} />
-                      </div>
-                      <input type="text" className="form-control" placeholder="yourname@upi" value={upiIdInput} onChange={e => setUpiIdInput(e.target.value)} style={{ width: '100%' }} />
-                      <button className="btn btn-primary" onClick={executePayment} style={{ width: '100%', justifyContent: 'center', backgroundColor: '#1351b6', padding: '12px' }}>Pay {formatCurrency(checkoutInvoice.totalAmount)}</button>
-                    </div>
-                  </div>
-                )}
-
-                {razorpayTab === 'card' && (
-                  <div>
-                    <button onClick={() => setRazorpayTab('methods')} style={{ border: 'none', background: 'none', color: '#1351b6', cursor: 'pointer', fontWeight: '700', fontSize: '12px', marginBottom: '12px' }}>← Back</button>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      <div className="form-group" style={{ margin: 0 }}><label style={{ fontSize: '11px', fontWeight: '600' }}>Card Number</label><input type="text" className="form-control" placeholder="4312 •••• •••• 9812" value={cardNo} onChange={e => setCardNo(e.target.value)} maxLength={19} /></div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                        <div className="form-group" style={{ margin: 0 }}><label style={{ fontSize: '11px', fontWeight: '600' }}>Expiry</label><input type="text" className="form-control" placeholder="MM/YY" value={cardExpiry} onChange={e => setCardExpiry(e.target.value)} maxLength={5} /></div>
-                        <div className="form-group" style={{ margin: 0 }}><label style={{ fontSize: '11px', fontWeight: '600' }}>CVV</label><input type="password" className="form-control" placeholder="•••" value={cardCvv} onChange={e => setCardCvv(e.target.value)} maxLength={3} /></div>
-                      </div>
-                      <div className="form-group" style={{ margin: 0 }}><label style={{ fontSize: '11px', fontWeight: '600' }}>Name on Card</label><input type="text" className="form-control" placeholder="Name on Card" value={cardName} onChange={e => setCardName(e.target.value)} /></div>
-                      <button className="btn btn-primary" onClick={executePayment} disabled={!cardNo || !cardExpiry || !cardCvv} style={{ width: '100%', justifyContent: 'center', backgroundColor: '#1351b6', padding: '12px', marginTop: '4px' }}>Pay {formatCurrency(checkoutInvoice.totalAmount)}</button>
-                    </div>
-                  </div>
-                )}
-
-                {razorpayTab === 'netbanking' && (
-                  <div>
-                    <button onClick={() => setRazorpayTab('methods')} style={{ border: 'none', background: 'none', color: '#1351b6', cursor: 'pointer', fontWeight: '700', fontSize: '12px', marginBottom: '12px' }}>← Back</button>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        {[{ key: 'hdfc', name: '🏦 HDFC' }, { key: 'sbi', name: '🏦 SBI' }, { key: 'icici', name: '🏦 ICICI' }, { key: 'axis', name: '🏦 Axis' }].map(b => (
-                          <button key={b.key} onClick={() => setSelectedBank(b.key)} style={{ padding: '10px', fontSize: '11px', fontWeight: '600', borderRadius: '6px', border: selectedBank === b.key ? '2px solid #1351b6' : '1px solid var(--border-color)', backgroundColor: selectedBank === b.key ? '#f0f6ff' : '#fff', color: selectedBank === b.key ? '#1351b6' : 'var(--text-primary)', cursor: 'pointer' }}>{b.name}</button>
-                        ))}
-                      </div>
-                      <select className="form-control" value={selectedBank} onChange={e => setSelectedBank(e.target.value)}>
-                        <option value="">— Other Bank —</option>
-                        <option value="kotak">Kotak Mahindra</option>
-                        <option value="pnb">Punjab National Bank</option>
-                        <option value="bob">Bank of Baroda</option>
-                        <option value="yes">Yes Bank</option>
-                      </select>
-                      <button className="btn btn-primary" onClick={executePayment} disabled={!selectedBank} style={{ width: '100%', justifyContent: 'center', backgroundColor: '#1351b6', padding: '12px' }}>Pay {formatCurrency(checkoutInvoice.totalAmount)}</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-            <div style={{ backgroundColor: '#f8fafc', padding: '10px 20px', borderTop: '1px solid var(--border-color)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '10px', color: 'var(--text-muted)' }}>
-              🔒 Secured payment by <strong style={{ color: '#0f1c3f' }}>Razorpay</strong>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

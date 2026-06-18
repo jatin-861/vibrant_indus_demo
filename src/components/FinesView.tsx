@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, FileText, Download, Upload, AlertTriangle, Trash2 } from 'lucide-react';
+import { Search, Plus, FileText, Download, Upload, AlertTriangle, Trash2, MessageSquare, PauseCircle, PlayCircle } from 'lucide-react';
 import type { FineRecord, Shade, Invoice } from '../types';
 
 interface FinesViewProps {
@@ -9,6 +9,8 @@ interface FinesViewProps {
   onAddFine: (fine: Omit<FineRecord, 'id'>) => void;
   onDeleteFine: (fineId: string) => void;
   onPayFine: (fineId: string) => void;
+  onSendOverdueReminder: (shadeId: string) => void;
+  onSetFinePause: (shadeId: string, paused: boolean, reason: string) => void;
 }
 
 export const FinesView: React.FC<FinesViewProps> = ({
@@ -17,10 +19,14 @@ export const FinesView: React.FC<FinesViewProps> = ({
   invoices,
   onAddFine,
   onDeleteFine,
-  onPayFine
+  onPayFine,
+  onSendOverdueReminder,
+  onSetFinePause
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [pauseShadeId, setPauseShadeId] = useState<string | null>(null);
+  const [pauseReason, setPauseReason] = useState('');
 
   // Form states
   const [fineDate, setFineDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -162,15 +168,119 @@ export const FinesView: React.FC<FinesViewProps> = ({
         </div>
       </div>
 
-      {/* Warning Policy Banner */}
-      <div className="alert-banner" style={{ backgroundColor: 'var(--color-pending-bg)', borderColor: '#fde68a', color: '#b45309', marginBottom: '24px' }}>
-        <div className="alert-content" style={{ color: '#b45309' }}>
-          <AlertTriangle size={20} />
-          <span>
-            <strong>Policy:</strong> 10% of base rent after due date. Applied monthly on unresolved overdue invoices.
-          </span>
+      {/* Overdue Invoice Audit */}
+      {(() => {
+        const overdueInvoices = invoices.filter(inv => inv.status === 'overdue');
+        if (overdueInvoices.length === 0) return null;
+        return (
+          <div style={{ marginBottom: '24px', border: '1px solid #fca5a5', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+            <div style={{ background: '#fef2f2', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #fca5a5' }}>
+              <AlertTriangle size={16} style={{ color: '#dc2626' }} />
+              <span style={{ fontWeight: '700', color: '#dc2626', fontSize: '14px' }}>
+                Overdue Payment Alerts — {overdueInvoices.length} shade{overdueInvoices.length > 1 ? 's' : ''} past due date
+              </span>
+            </div>
+            <div style={{ background: 'white' }}>
+              {overdueInvoices.map((inv, idx) => {
+                const shade = shades.find(s => s.id === inv.shadeId);
+                const finesPaused = shade?.penaltyDisabled === true;
+                return (
+                  <div key={inv.id} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '12px 20px', flexWrap: 'wrap', gap: '8px',
+                    borderBottom: idx < overdueInvoices.length - 1 ? '1px solid #fee2e2' : 'none'
+                  }}>
+                    <div style={{ display: 'flex', gap: '24px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <strong style={{ minWidth: '80px' }}>Shade {inv.shadeId}</strong>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{inv.renterName || inv.ownerName}</span>
+                      <span style={{ color: 'var(--primary)', fontSize: '13px', fontWeight: '600' }}>{inv.id}</span>
+                      <span style={{ fontSize: '13px' }}>{formatCurrency(inv.totalAmount)}</span>
+                      <span style={{ color: '#dc2626', fontSize: '12px' }}>Due: {inv.dueDate}</span>
+                      {finesPaused && (
+                        <span title={shade?.penaltyDisabledReason || ''} style={{ color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', padding: '2px 8px', fontSize: '11px', fontWeight: '700' }}>
+                          Fines Paused{shade?.penaltyDisabledReason ? ` — ${shade.penaltyDisabledReason}` : ''}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => onSendOverdueReminder(inv.shadeId)}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#25d366', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
+                      >
+                        <MessageSquare size={14} /> Send WA Reminder
+                      </button>
+                      {finesPaused ? (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => {
+                            if (confirm(`Resume daily late fines for Shade ${inv.shadeId}?`)) {
+                              onSetFinePause(inv.shadeId, false, '');
+                            }
+                          }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'white', color: '#15803d', border: '1px solid #86efac', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
+                        >
+                          <PlayCircle size={14} /> Resume Fines
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => { setPauseShadeId(inv.shadeId); setPauseReason(''); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'white', color: '#92400e', border: '1px solid #fde68a', padding: '6px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
+                        >
+                          <PauseCircle size={14} /> Stop Fines
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Stop Fines Modal — requires a reason, e.g. tenant financial hardship */}
+      {pauseShadeId && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '420px' }}>
+            <div className="modal-header">
+              <h3>Stop Fines — Shade {pauseShadeId}</h3>
+              <button className="modal-close" onClick={() => setPauseShadeId(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Reason for stopping daily fines*</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="e.g. Tenant facing financial hardship"
+                  value={pauseReason}
+                  onChange={(e) => setPauseReason(e.target.value)}
+                  autoFocus
+                />
+              </div>
+              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                Daily late fine generation will stop for this shade going forward. The reason is stored and visible to other admins. You can resume fines anytime.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setPauseShadeId(null)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!pauseReason.trim()}
+                onClick={() => {
+                  onSetFinePause(pauseShadeId, true, pauseReason.trim());
+                  setPauseShadeId(null);
+                }}
+              >
+                Confirm — Stop Fines
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Search Bar */}
       {fines.length > 0 && (
@@ -218,56 +328,93 @@ export const FinesView: React.FC<FinesViewProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filteredFines.map(f => (
-                <tr key={f.id}>
-                  <td>{f.date}</td>
-                  <td><strong>Shade {f.shadeId}</strong></td>
-                  <td>
-                    {f.invoiceId ? (
-                      <strong style={{ color: 'var(--primary)' }}>{f.invoiceId}</strong>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>—</span>
-                    )}
-                  </td>
-                  <td>{f.ownerName}</td>
-                  <td>
-                    <strong className="text-danger">
-                      +{formatCurrency(f.amount)}
-                    </strong>
-                  </td>
-                  <td>{f.reason}</td>
-                  <td>
-                    <span className={`badge badge-${f.status === 'paid' ? 'paid' : 'overdue'}`}>
-                      {f.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      {f.status === 'unpaid' && (
-                        <button 
-                          className="btn btn-success btn-sm"
-                          onClick={() => onPayFine(f.id)}
-                          style={{ padding: '4px 8px' }}
-                        >
-                          Mark Paid
-                        </button>
+              {filteredFines.map(f => {
+                const shade = shades.find(s => s.id === f.shadeId);
+                const finesPaused = shade?.penaltyDisabled === true;
+                return (
+                  <tr key={f.id}>
+                    <td>{f.date}</td>
+                    <td><strong>Shade {f.shadeId}</strong></td>
+                    <td>
+                      {f.invoiceId ? (
+                        <strong style={{ color: 'var(--primary)' }}>{f.invoiceId}</strong>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
                       )}
-                      <button 
-                        className="btn btn-secondary btn-sm text-danger"
-                        title="Delete Fine Penalty"
-                        onClick={() => {
-                          if (confirm('Are you sure you want to remove this fine entry?')) {
-                            onDeleteFine(f.id);
-                          }
-                        }}
-                        style={{ padding: '4px' }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>{f.ownerName}</td>
+                    <td>
+                      <strong className="text-danger">
+                        +{formatCurrency(f.amount)}
+                      </strong>
+                    </td>
+                    <td>{f.reason}</td>
+                    <td>
+                      <span className={`badge badge-${f.status === 'paid' ? 'paid' : 'overdue'}`}>
+                        {f.status}
+                      </span>
+                      {finesPaused && (
+                        <div
+                          title={shade?.penaltyDisabledReason || ''}
+                          style={{ marginTop: '4px', color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: '700', display: 'inline-block', whiteSpace: 'nowrap' }}
+                        >
+                          Daily Fines Paused
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        {f.status === 'unpaid' && (
+                          <button
+                            className="btn btn-success btn-sm"
+                            onClick={() => onPayFine(f.id)}
+                            style={{ padding: '4px 8px' }}
+                          >
+                            Mark Paid
+                          </button>
+                        )}
+                        {shade && (
+                          finesPaused ? (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              title="Resume daily late fines for this shade"
+                              onClick={() => {
+                                if (confirm(`Resume daily late fines for Shade ${f.shadeId}?`)) {
+                                  onSetFinePause(f.shadeId, false, '');
+                                }
+                              }}
+                              style={{ padding: '4px 8px', color: '#15803d' }}
+                            >
+                              Resume Fines
+                            </button>
+                          ) : (
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              title="Stop daily late fines for this shade (e.g. financial hardship)"
+                              onClick={() => { setPauseShadeId(f.shadeId); setPauseReason(''); }}
+                              style={{ padding: '4px 8px', color: '#92400e' }}
+                            >
+                              Stop Fines
+                            </button>
+                          )
+                        )}
+                        <button
+                          className="btn btn-secondary btn-sm text-danger"
+                          title="Delete Fine Penalty"
+                          onClick={() => {
+                            if (confirm('Are you sure you want to remove this fine entry?')) {
+                              onDeleteFine(f.id);
+                            }
+                          }}
+                          style={{ padding: '4px' }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredFines.length === 0 && (
                 <tr>
                   <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>

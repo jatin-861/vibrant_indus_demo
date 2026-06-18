@@ -5,6 +5,7 @@ import type { Payment, Invoice } from '../types';
 interface PaymentsViewProps {
   payments: Payment[];
   invoices: Invoice[];
+  currentDate: string;
   onRecordPayment: (payment: Omit<Payment, 'id'>) => void;
   onDeletePayment: (paymentId: string) => void;
 }
@@ -12,6 +13,7 @@ interface PaymentsViewProps {
 export const PaymentsView: React.FC<PaymentsViewProps> = ({
   payments,
   invoices,
+  currentDate,
   onRecordPayment,
   onDeletePayment
 }) => {
@@ -83,10 +85,11 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   const totalCollected = payments.reduce((sum, p) => sum + p.amount, 0);
   const avgPayment = payments.length > 0 ? Math.round(totalCollected / payments.length) : 0;
   
-  // Filter payments for "This Month" (May 2026 in simulation)
+  const currentMonthPrefix = currentDate.slice(0, 7);
   const thisMonthPayments = payments
-    .filter(p => p.date.startsWith('2026-05'))
+    .filter(p => p.date.startsWith(currentMonthPrefix))
     .reduce((sum, p) => sum + p.amount, 0);
+  const currentMonthLabel = new Date(currentDate).toLocaleString('en-IN', { month: 'long', year: 'numeric' });
 
   const filteredPayments = payments.filter(p => {
     const search = searchTerm.toLowerCase();
@@ -115,7 +118,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           <button className="btn btn-secondary btn-sm"><Download size={14} /> Export</button>
           <button className="btn btn-secondary btn-sm"><Upload size={14} /> Import</button>
           <button className="btn btn-primary" onClick={() => setIsRecordModalOpen(true)}>
-            <Plus size={16} /> Record Payment
+            <Plus size={16} /> Receipt Payment
           </button>
         </div>
       </div>
@@ -157,7 +160,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           </div>
           <div className="metric-value" style={{ color: 'var(--primary)' }}>{formatCurrency(thisMonthPayments)}</div>
           <div className="metric-trend up" style={{ color: 'var(--primary)' }}>
-            <span>May 2026 Collected</span>
+            <span>{currentMonthLabel} Collected</span>
           </div>
         </div>
       </div>
@@ -223,7 +226,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button 
                       className="btn btn-secondary btn-sm"
-                      title="Edit Transaction Record"
+                      title="Edit Transaction Receipt"
                       onClick={() => alert('Editing logged transaction...')}
                       style={{ padding: '4px' }}
                     >
@@ -231,9 +234,9 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                     </button>
                     <button 
                       className="btn btn-secondary btn-sm text-danger"
-                      title="Delete Transaction Record"
+                      title="Delete Transaction Receipt"
                       onClick={() => {
-                        if (confirm('Are you sure you want to delete this payment record? This does not alter invoice state.')) {
+                        if (confirm('Are you sure you want to delete this payment receipt? This does not alter invoice state.')) {
                           onDeletePayment(p.id);
                         }
                       }}
@@ -256,12 +259,12 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
         </table>
       </div>
 
-      {/* Record Payment Modal */}
+      {/* Receipt Payment Modal */}
       {isRecordModalOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Record Payment Transaction</h3>
+              <h3>Generate Payment Receipt</h3>
               <button className="modal-close" onClick={() => setIsRecordModalOpen(false)}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
@@ -362,7 +365,7 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setIsRecordModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Log Payment</button>
+                <button type="submit" className="btn btn-primary">Save Receipt</button>
               </div>
             </form>
           </div>

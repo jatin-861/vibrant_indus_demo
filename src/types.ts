@@ -1,3 +1,11 @@
+export interface ShadeDocument {
+  id: string;
+  name: string;
+  type: string; // mime type, e.g. "application/pdf" or "image/png"
+  dataUrl: string; // base64 data URI or public asset path
+  uploadedDate: string; // YYYY-MM-DD
+}
+
 export interface Shade {
   id: string; // e.g., "SH-001"
   block: string; // e.g., "Block A"
@@ -10,8 +18,9 @@ export interface Shade {
   lastWaterReading: number;
   currentWaterReading: number;
   transferFeeTriggered: boolean; // if true, add one-time 2500 INR transfer fee
-  hasWaterSupply?: boolean; // if false, disable water supply logging and billing
   penaltyDisabled?: boolean; // if true, auto-fine is skipped for this shade
+  penaltyDisabledReason?: string; // reason given when fines were paused (e.g. financial hardship)
+  documents?: ShadeDocument[]; // attached PDFs / images (lease, ownership proof, etc.)
 }
 
 export interface Owner {
@@ -100,6 +109,7 @@ export interface SystemSettings {
   invoicePrefix: string; // e.g. "KIN" → KIN-2026-0001
   invoiceNotes: string;
   reminderDays: number[]; // e.g. [3, 1] = send 3 days before & 1 day before due date
+  analyticsYear: number; // year to show in dashboard analytics
 }
 
 export interface AdminRole {

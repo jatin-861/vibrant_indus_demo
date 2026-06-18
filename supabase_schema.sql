@@ -22,8 +22,9 @@ CREATE TABLE IF NOT EXISTS shades (
     last_water_reading INTEGER NOT NULL DEFAULT 0,
     current_water_reading INTEGER NOT NULL DEFAULT 0,
     transfer_fee_triggered BOOLEAN NOT NULL DEFAULT FALSE,
-    has_water_supply BOOLEAN NOT NULL DEFAULT TRUE,
-    penalty_disabled BOOLEAN NOT NULL DEFAULT FALSE
+    penalty_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+    penalty_disabled_reason TEXT,
+    documents TEXT NOT NULL DEFAULT '[]'
 );
 
 -- 3. BILLING INVOICES TABLE
@@ -122,7 +123,18 @@ CREATE TABLE IF NOT EXISTS change_requests (
     date TEXT NOT NULL
 );
 
--- 9. POPULATE DEFAULT PARAMETERS ROW (Initial config setup)
+-- 9. AUDIT LOG TABLE (tracks every admin action)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    entity TEXT NOT NULL,
+    performed_by TEXT NOT NULL,
+    role TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    details TEXT
+);
+
+-- 10. POPULATE DEFAULT PARAMETERS ROW (Initial config setup)
 INSERT INTO system_settings (id, default_maintenance, water_rate, transfer_fee, grace_period_days, fine_per_day, upi_id, qr_image_url, society_name, society_address, society_phone, society_bank_details, invoice_title, invoice_prefix, invoice_notes)
 VALUES (
     1, 

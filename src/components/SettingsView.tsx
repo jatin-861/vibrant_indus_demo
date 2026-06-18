@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Save, 
-  RefreshCw, 
-  Copy,
-  Check
+  RefreshCw
 } from 'lucide-react';
 import type { SystemSettings } from '../types';
 
@@ -42,10 +40,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [reminderDays, setReminderDays] = useState<string>(
     (settings.reminderDays || [3, 1]).join(', ')
   );
+  const [analyticsYear, setAnalyticsYear] = useState(settings.analyticsYear || new Date().getFullYear());
 
-  const [copied, setCopied] = useState(false);
   const [successMsg, setSuccessMsg] = useState(false);
   const [requestSubmittedMsg, setRequestSubmittedMsg] = useState(false);
+
+  // Sync when Supabase loads real settings after initial render
+  React.useEffect(() => {
+    setDefaultMaintenance(settings.defaultMaintenance);
+    setWaterRate(settings.waterRate);
+    setTransferFee(settings.transferFee);
+    setGracePeriodDays(settings.gracePeriodDays);
+    setFinePerDay(settings.finePerDay);
+    setUpiId(settings.upiId || '');
+    setSocietyName(settings.societyName || '');
+    setSocietyAddress(settings.societyAddress || '');
+    setSocietyPhone(settings.societyPhone || '');
+    setSocietyBankDetails(settings.societyBankDetails || '');
+    setInvoiceTitle(settings.invoiceTitle || '');
+    setInvoicePrefix(settings.invoicePrefix || '');
+    setInvoiceNotes(settings.invoiceNotes || '');
+    setReminderDays((settings.reminderDays || [3, 1]).join(', '));
+    setAnalyticsYear(settings.analyticsYear || new Date().getFullYear());
+  }, [settings]);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +86,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       invoiceTitle,
       invoicePrefix,
       invoiceNotes,
-      reminderDays: parsedReminderDays.length > 0 ? parsedReminderDays : [3, 1]
+      reminderDays: parsedReminderDays.length > 0 ? parsedReminderDays : [3, 1],
+      analyticsYear
     };
 
     if (currentRole === 'Admin') {
@@ -77,9 +95,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setSuccessMsg(true);
       setTimeout(() => setSuccessMsg(false), 3000);
     } else {
+      const changesList: string[] = [];
+      if (settings.defaultMaintenance !== defaultMaintenance) changesList.push(`Default Maintenance: ₹${settings.defaultMaintenance} → ₹${defaultMaintenance}`);
+      if (settings.waterRate !== waterRate) changesList.push(`Water Rate: ₹${settings.waterRate} → ₹${waterRate}`);
+      if (settings.transferFee !== transferFee) changesList.push(`Transfer Fee: ₹${settings.transferFee} → ₹${transferFee}`);
+      if (settings.gracePeriodDays !== gracePeriodDays) changesList.push(`Grace Period: ${settings.gracePeriodDays} days → ${gracePeriodDays} days`);
+      if (settings.finePerDay !== finePerDay) changesList.push(`Fine Per Day: ₹${settings.finePerDay} → ₹${finePerDay}`);
+      if ((settings.upiId || '') !== upiId) changesList.push(`UPI ID: "${settings.upiId || ''}" → "${upiId}"`);
+      if ((settings.societyName || '') !== societyName) changesList.push(`Society Name: "${settings.societyName || ''}" → "${societyName}"`);
+      if ((settings.societyAddress || '') !== societyAddress) changesList.push(`Society Address: "${settings.societyAddress || ''}" → "${societyAddress}"`);
+      if ((settings.societyPhone || '') !== societyPhone) changesList.push(`Society Phone: "${settings.societyPhone || ''}" → "${societyPhone}"`);
+      if ((settings.societyBankDetails || '') !== societyBankDetails) changesList.push(`Society Bank Details: "${settings.societyBankDetails || ''}" → "${societyBankDetails}"`);
+      if ((settings.invoiceTitle || '') !== invoiceTitle) changesList.push(`Invoice Title: "${settings.invoiceTitle || ''}" → "${invoiceTitle}"`);
+      if ((settings.invoicePrefix || '') !== invoicePrefix) changesList.push(`Invoice Prefix: "${settings.invoicePrefix || ''}" → "${invoicePrefix}"`);
+      if ((settings.invoiceNotes || '') !== invoiceNotes) changesList.push(`Invoice Notes: "${settings.invoiceNotes || ''}" → "${invoiceNotes}"`);
+      if ((settings.reminderDays || []).join(',') !== payload.reminderDays.join(',')) changesList.push(`Reminder Days: [${(settings.reminderDays || []).join(', ')}] → [${payload.reminderDays.join(', ')}]`);
+      if ((settings.analyticsYear || 0) !== analyticsYear) changesList.push(`Analytics Year: ${settings.analyticsYear} → ${analyticsYear}`);
+
       onSubmitRequest(
         'update_settings',
-        `Update billing params: Maint ₹${defaultMaintenance}, Water Rate ₹${waterRate}, Transfer Fee ₹${transferFee}, Grace Period ${gracePeriodDays} days, Fine ₹${finePerDay}/day`,
+        changesList.length > 0 ? changesList.join('\n') : 'No changes detected',
         payload
       );
       setRequestSubmittedMsg(true);
@@ -87,21 +122,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const copyTemplateData = () => {
-    const csvContent = 
-`Shade ID,Block,Floor,Size (SqFt),Status,Maintenance Rate,Last Water Reading
-SH-001,Block A,Ground Floor,500,occupied,700,1050
-SH-002,Block A,First Floor,450,occupied,700,820
-SH-003,Block B,Ground Floor,600,vacant,700,0
-SH-004,Block B,First Floor,400,occupied,700,310`;
 
-    navigator.clipboard.writeText(csvContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
 
   return (
-    <div className="settings-view" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '32px' }}>
+    <div className="settings-view" style={{ maxWidth: '800px', margin: '0 auto' }}>
       {/* Left Column: Config Panel */}
       <div>
         <div className="card">
@@ -279,6 +303,26 @@ SH-004,Block B,First Floor,400,occupied,700,310`;
                 </div>
               </div>
 
+              <h4 style={{ fontSize: '14px', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px', marginTop: '24px', color: 'var(--primary)' }}>Dashboard & Analytics</h4>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Analytics Year (Dashboard KPIs & Chart)</label>
+                  <select
+                    className="form-control"
+                    value={analyticsYear}
+                    onChange={(e) => setAnalyticsYear(parseInt(e.target.value))}
+                  >
+                    {Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - 3 + i).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
+                    Dashboard KPI cards and the monthly chart will show data for this year only.
+                  </span>
+                </div>
+              </div>
+
               <h4 style={{ fontSize: '14px', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px', marginTop: '24px', color: 'var(--primary)' }}>WhatsApp Reminder Schedule</h4>
 
               <div className="form-group">
@@ -334,37 +378,6 @@ SH-004,Block B,First Floor,400,occupied,700,310`;
           </div>
         </div>
       </div>
-
-        <div className="card">
-          <div className="card-header">
-            <h3>Excel / CSV Import Helper</h3>
-          </div>
-          <div className="card-body" style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <p>
-              Use this structure to format your Excel sheets. Select columns and copy-paste directly into the Shade Importer tool.
-            </p>
-            
-            <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', position: 'relative' }}>
-              <pre style={{ fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>
-{`Shade ID,Block,Floor,Size,Status,Rate,Reading
-SH-001,Block A,Ground,500,occupied,700,1050
-SH-002,Block A,First,450,occupied,700,820`}
-              </pre>
-              <button 
-                type="button" 
-                className="btn btn-secondary btn-sm"
-                onClick={copyTemplateData}
-                style={{ position: 'absolute', top: '8px', right: '8px', padding: '4px' }}
-              >
-                {copied ? <Check size={12} style={{ color: 'var(--color-success)' }} /> : <Copy size={12} />}
-              </button>
-            </div>
-            
-            <p>
-              Copying data in this layout allows instant recognition of shade IDs, floor levels, maintenance rates, and initial water meters.
-            </p>
-          </div>
-        </div>
-      </div>
+    </div>
   );
 };

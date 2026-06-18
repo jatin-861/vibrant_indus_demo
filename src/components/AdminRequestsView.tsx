@@ -52,26 +52,40 @@ export const AdminRequestsView: React.FC<AdminRequestsViewProps> = ({
     }
   };
 
-  const formatPayload = (req: ChangeRequest) => {
-    try {
-      const data = JSON.parse(req.data);
-      return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginTop: '10px', padding: '10px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
-          {Object.keys(data).map(key => {
-            const val = data[key];
-            if (val === null || typeof val === 'object') return null;
-            return (
-              <div key={key} style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ color: 'var(--text-secondary)', fontWeight: '600', fontSize: '10px', textTransform: 'uppercase' }}>{key.replace(/([A-Z])/g, ' $1')}</span>
-                <span style={{ color: 'var(--text-primary)', fontWeight: '700' }}>{val.toString()}</span>
-              </div>
-            );
-          })}
-        </div>
-      );
-    } catch {
-      return <pre style={{ fontSize: '11px', marginTop: '10px' }}>{req.data}</pre>;
+  // Renders "Field: old → new" lines as a clean before/after diff list.
+  // Falls back to plain text for single-line / non-diff messages (e.g. reset_db).
+  const renderDetails = (details: string) => {
+    const lines = details.split('\n').filter(Boolean);
+    if (lines.length <= 1) {
+      return <span>{details}</span>;
     }
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+        {lines.map((line, idx) => {
+          const colonIdx = line.indexOf(':');
+          if (colonIdx === -1) {
+            return <div key={idx} style={{ fontSize: '12px' }}>{line}</div>;
+          }
+          const field = line.slice(0, colonIdx);
+          const rest = line.slice(colonIdx + 1).trim();
+          const arrowParts = rest.split('→');
+          return (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', padding: '7px 10px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+              <span style={{ fontWeight: '700', color: 'var(--text-secondary)' }}>{field}</span>
+              {arrowParts.length === 2 ? (
+                <>
+                  <span style={{ color: 'var(--color-danger)', textDecoration: 'line-through', opacity: 0.75 }}>{arrowParts[0].trim()}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>→</span>
+                  <span style={{ color: 'var(--color-success)', fontWeight: '700' }}>{arrowParts[1].trim()}</span>
+                </>
+              ) : (
+                <span>{rest}</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
   };
 
   return (
@@ -164,10 +178,9 @@ export const AdminRequestsView: React.FC<AdminRequestsViewProps> = ({
                 </div>
               </div>
 
-              {/* Request Message details */}
+              {/* Request Message details — module is already shown above; this is just what changed */}
               <div style={{ fontSize: '13px', color: 'var(--text-primary)', borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '4px' }}>
-                <strong>Details:</strong> {req.details}
-                {formatPayload(req)}
+                <strong>Details:</strong> {renderDetails(req.details)}
               </div>
             </div>
           </div>

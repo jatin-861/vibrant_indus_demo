@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Plus,
   Upload,
@@ -9,10 +9,15 @@ import {
   FileText,
   Crown,
   Building,
-  RefreshCw
+  RefreshCw,
+  Eye,
+  Paperclip,
+  X,
+  Download
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import type { Shade, Owner, SystemSettings, Invoice } from '../types';
+import type { Shade, Owner, SystemSettings, Invoice, ShadeDocument } from '../types';
+import { CustomDropdown } from './CustomDropdown';
 
 interface ShadesViewProps {
   shades: Shade[];
@@ -45,6 +50,8 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingShade, setEditingShade] = useState<Shade | null>(null);
+  const [viewingShade, setViewingShade] = useState<Shade | null>(null);
+  const [newDocuments, setNewDocuments] = useState<ShadeDocument[]>([]);
 
   // Form states
   const [shadeId, setShadeId] = useState('');
@@ -54,9 +61,13 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   const [status, setStatus] = useState<'vacant' | 'occupied' | 'maintenance'>('vacant');
   const [ownerId, setOwnerId] = useState<string>('');
   const [renterId, setRenterId] = useState<string>('');
-  const [fixedMaintenance, setFixedMaintenance] = useState(700);
+  const [fixedMaintenance, setFixedMaintenance] = useState(settings?.defaultMaintenance || 700);
   const [lastWaterReading, setLastWaterReading] = useState(0);
-  const [hasWaterSupply, setHasWaterSupply] = useState(true);
+
+  // Sync default maintenance when settings change
+  useEffect(() => {
+    if (settings?.defaultMaintenance) setFixedMaintenance(settings.defaultMaintenance);
+  }, [settings?.defaultMaintenance]);
 
   // Bulk import state
   const [importText, setImportText] = useState('');
@@ -65,6 +76,24 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   // Water reading updates
   const [updatingWaterShade, setUpdatingWaterShade] = useState<Shade | null>(null);
   const [newWaterVal, setNewWaterVal] = useState(0);
+
+  const readFilesAsDocuments = (files: FileList): Promise<ShadeDocument[]> => {
+    const today = new Date().toISOString().split('T')[0];
+    return Promise.all(
+      Array.from(files).map(file => new Promise<ShadeDocument>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve({
+          id: `DOC-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: file.name,
+          type: file.type,
+          dataUrl: reader.result as string,
+          uploadedDate: today
+        });
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      }))
+    );
+  };
 
   const getOwnerName = (oId: string | null) => {
     if (!oId) return 'N/A';
@@ -98,7 +127,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
       fixedMaintenance,
       lastWaterReading,
       transferFeeTriggered: false,
-      hasWaterSupply
+      documents: newDocuments
     });
 
     // Reset
@@ -109,10 +138,26 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
     setStatus('vacant');
     setOwnerId('');
     setRenterId('');
-    setFixedMaintenance(700);
+    setFixedMaintenance(settings?.defaultMaintenance || 700);
     setLastWaterReading(0);
-    setHasWaterSupply(true);
+    setNewDocuments([]);
     setIsAddModalOpen(false);
+  };
+
+  const handleNewDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const docs = await readFilesAsDocuments(files);
+    setNewDocuments(prev => [...prev, ...docs]);
+    e.target.value = '';
+  };
+
+  const handleEditDocumentSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !editingShade) return;
+    const docs = await readFilesAsDocuments(files);
+    setEditingShade({ ...editingShade, documents: [...(editingShade.documents || []), ...docs] });
+    e.target.value = '';
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
@@ -126,25 +171,25 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
       const changesList: string[] = [];
       if (original) {
         if (original.lastWaterReading !== editingShade.lastWaterReading) {
-          changesList.push(`Previous Water Reading changed from ${original.lastWaterReading} to ${editingShade.lastWaterReading}`);
+          changesList.push(`Previous Water Reading: ${original.lastWaterReading} → ${editingShade.lastWaterReading}`);
         }
         if (original.fixedMaintenance !== editingShade.fixedMaintenance) {
-          changesList.push(`Maintenance Rate changed from ₹${original.fixedMaintenance} to ₹${editingShade.fixedMaintenance}`);
-        }
-        if (original.hasWaterSupply !== editingShade.hasWaterSupply) {
-          changesList.push(`Water supply status changed from ${original.hasWaterSupply !== false ? 'Enabled' : 'Disabled'} to ${editingShade.hasWaterSupply !== false ? 'Enabled' : 'Disabled'}`);
+          changesList.push(`Maintenance Rate: ₹${original.fixedMaintenance} → ₹${editingShade.fixedMaintenance}`);
         }
         if (original.ownerId !== editingShade.ownerId) {
-          changesList.push('Owner assigned changed');
+          changesList.push(`Owner: ${getOwnerName(original.ownerId)} → ${getOwnerName(editingShade.ownerId)}`);
+        }
+        if (original.renterId !== editingShade.renterId) {
+          changesList.push(`Tenant: ${getOwnerName(original.renterId)} → ${getOwnerName(editingShade.renterId)}`);
         }
         if (original.status !== editingShade.status) {
-          changesList.push(`Status changed from ${original.status} to ${editingShade.status}`);
+          changesList.push(`Status: ${original.status} → ${editingShade.status}`);
         }
       }
 
       onSubmitRequest(
         'edit_shade',
-        `Modify unit ${editingShade.id} registry details: ${changesList.join(', ') || 'General update'}`,
+        changesList.length > 0 ? changesList.join('\n') : 'No field changes detected',
         editingShade
       );
       alert(`Request submitted to Admin for approval. The unit details will update once approved.`);
@@ -153,9 +198,9 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = 'Shade ID,Block,Floor,Size (SqFt),Status,Maintenance Rate,Last Water Reading,Has Water Supply\n';
-    const rows = shades.map(s => 
-      `"${s.id}","${s.block}","${s.floor}",${s.sqFt},"${s.status}",${s.fixedMaintenance},${s.lastWaterReading},${s.hasWaterSupply !== false}`
+    const headers = 'Shade ID,Block,Floor,Size (SqFt),Status,Maintenance Rate,Last Water Reading\n';
+    const rows = shades.map(s =>
+      `"${s.id}","${s.block}","${s.floor}",${s.sqFt},"${s.status}",${s.fixedMaintenance},${s.lastWaterReading}`
     ).join('\n');
     
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -216,7 +261,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
       let statusIdx = 4;
       let maintIdx = 5;
       let waterIdx = 6;
-      let waterSupplyIdx = 7;
 
       if (hasHeader) {
         startIdx = 1;
@@ -230,7 +274,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
           else if (name.includes('status')) statusIdx = idx;
           else if (name.includes('rate') || name.includes('maint')) maintIdx = idx;
           else if (name.includes('reading') || name.includes('water')) waterIdx = idx;
-          else if (name.includes('supply') || name.includes('has')) waterSupplyIdx = idx;
         });
       }
 
@@ -252,7 +295,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
         const occStatus = (cleanCols[statusIdx]?.toLowerCase() as 'vacant' | 'occupied' | 'maintenance') || 'vacant';
         const maintenanceRate = parseInt(cleanCols[maintIdx]) || 700;
         const waterVal = parseInt(cleanCols[waterIdx]) || 0;
-        const hasWater = cleanCols[waterSupplyIdx] ? cleanCols[waterSupplyIdx].toLowerCase() !== 'false' : true;
 
         parsedShades.push({
           id,
@@ -264,8 +306,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
           renterId: null,
           fixedMaintenance: maintenanceRate,
           lastWaterReading: waterVal,
-          transferFeeTriggered: false,
-          hasWaterSupply: hasWater
+          transferFeeTriggered: false
         });
       }
 
@@ -336,7 +377,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
           <button className="btn btn-secondary" onClick={() => setIsImportModalOpen(true)}>
             <Upload size={16} /> Import Excel / CSV
           </button>
-          <button className="btn btn-primary" onClick={() => setIsAddModalOpen(true)}>
+          <button className="btn btn-primary" onClick={() => { setNewDocuments([]); setIsAddModalOpen(true); }}>
             <Plus size={16} /> Add Shade
           </button>
         </div>
@@ -407,53 +448,55 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   <span className="shade-rate-label">Maintenance</span>
                   <span className="shade-rate-val">
                     {s.currentWaterReading > s.lastWaterReading && settings ? (
-                      <>₹{s.fixedMaintenance} + ₹{(s.currentWaterReading - s.lastWaterReading) * (settings.waterRate || 30)}<span style={{ fontSize: '10px', color: 'var(--text-secondary)', marginLeft: '4px' }}>(water)</span></>
+                      <>₹{settings.defaultMaintenance} + ₹{(s.currentWaterReading - s.lastWaterReading) * (settings.waterRate || 30)}<span style={{ fontSize: '10px', color: 'var(--text-secondary)', marginLeft: '4px' }}>(water)</span></>
                     ) : (
-                      <>₹{s.fixedMaintenance}</>
+                      <>₹{settings?.defaultMaintenance || s.fixedMaintenance}</>
                     )}
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', marginTop: '12px', gap: '6px', flexWrap: 'wrap' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '12px', width: '100%' }}>
                   {s.status === 'occupied' && (
                     <button
                       className="btn btn-primary btn-sm"
                       title="Generate Invoice for this unit"
                       onClick={() => onGenerateInvoice && onGenerateInvoice(s.id)}
+                      style={{ backgroundColor: 'var(--primary)', borderColor: 'var(--primary)', justifyContent: 'center' }}
                     >
                       <FileText size={12} /> Bill
                     </button>
                   )}
-                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '6px' }}>
-                    {s.status === 'occupied' && (
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        title="Log water meter reading"
-                        onClick={() => {
-                          setUpdatingWaterShade(s);
-                          setNewWaterVal(s.currentWaterReading || s.lastWaterReading);
-                        }}
-                      >
-                        <Droplet size={12} /> Meter
-                      </button>
-                    )}
-                    {s.status === 'occupied' && (
-                      <button
-                        className="btn btn-secondary btn-sm"
-                        title="Transfer Ownership or Renter"
-                        onClick={() => onOpenOwnerTransferModal(s.id)}
-                      >
-                        <RefreshCw size={12} /> Transfer
-                      </button>
-                    )}
+                  {s.status === 'occupied' && (
                     <button
                       className="btn btn-secondary btn-sm"
-                      title="Edit shade"
-                      onClick={() => setEditingShade(s)}
+                      title="Log water meter reading"
+                      onClick={() => {
+                        setUpdatingWaterShade(s);
+                        setNewWaterVal(s.currentWaterReading || s.lastWaterReading);
+                      }}
+                      style={{ justifyContent: 'center' }}
                     >
-                      <Edit2 size={12} />
+                      <Droplet size={12} /> Meter
                     </button>
-                  </div>
+                  )}
+                  {s.status === 'occupied' && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      title="Transfer Ownership or Renter"
+                      onClick={() => onOpenOwnerTransferModal(s.id)}
+                      style={{ justifyContent: 'center' }}
+                    >
+                      <RefreshCw size={12} /> Transfer
+                    </button>
+                  )}
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    title="View shade details"
+                    onClick={() => setViewingShade(s)}
+                    style={{ justifyContent: 'center', gridColumn: s.status === 'occupied' ? undefined : '1 / -1' }}
+                  >
+                    <Eye size={12} /> Details
+                  </button>
                 </div>
               </div>
             </div>
@@ -473,7 +516,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
           <div className="modal-content">
             <div className="modal-header">
               <h3>Register New Shade</h3>
-              <button className="modal-close" onClick={() => setIsAddModalOpen(false)}>×</button>
+              <button className="modal-close" onClick={() => { setIsAddModalOpen(false); setNewDocuments([]); }}>×</button>
             </div>
             <form onSubmit={handleAddSubmit}>
               <div className="modal-body">
@@ -554,30 +597,28 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   <>
                     <div className="form-group">
                       <label>Assign Owner</label>
-                      <select 
-                        className="form-control"
-                        value={ownerId}
-                        onChange={(e) => setOwnerId(e.target.value)}
-                      >
-                        <option value="">-- Select Owner --</option>
-                        {owners.filter(o => o.type === 'owner').map(o => (
-                          <option key={o.id} value={o.id}>{o.name}</option>
-                        ))}
-                      </select>
+                      <CustomDropdown
+                        options={[{ value: '', label: '-- Select Owner --' }, ...owners.filter(o => o.type === 'owner').map(o => ({ value: o.id, label: o.name, subLabel: o.phone || undefined }))]}
+                        selectedValue={ownerId}
+                        onChange={setOwnerId}
+                        placeholder="-- Select Owner --"
+                        searchPlaceholder="Search owner..."
+                        sortMode="alpha"
+                        showAlphabetSidebar
+                      />
                     </div>
 
                     <div className="form-group">
                       <label>Assign Tenant / Renter</label>
-                      <select 
-                        className="form-control"
-                        value={renterId}
-                        onChange={(e) => setRenterId(e.target.value)}
-                      >
-                        <option value="">-- Select Renter (Optional) --</option>
-                        {owners.filter(o => o.type === 'renter').map(o => (
-                          <option key={o.id} value={o.id}>{o.name}</option>
-                        ))}
-                      </select>
+                      <CustomDropdown
+                        options={[{ value: '', label: '-- Select Renter (Optional) --' }, ...owners.filter(o => o.type === 'renter').map(o => ({ value: o.id, label: o.name, subLabel: o.phone || undefined }))]}
+                        selectedValue={renterId}
+                        onChange={setRenterId}
+                        placeholder="-- Select Renter (Optional) --"
+                        searchPlaceholder="Search renter..."
+                        sortMode="alpha"
+                        showAlphabetSidebar
+                      />
                     </div>
                   </>
                 )}
@@ -585,8 +626,8 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                 <div className="form-row">
                   <div className="form-group">
                     <label>2-Month Maintenance Rate (₹)*</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       className="form-control"
                       value={fixedMaintenance}
                       onChange={(e) => setFixedMaintenance(parseInt(e.target.value) || 0)}
@@ -596,8 +637,8 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
 
                   <div className="form-group">
                     <label>Initial Water Reading (Units)*</label>
-                    <input 
-                      type="number" 
+                    <input
+                      type="number"
                       className="form-control"
                       value={lastWaterReading}
                       onChange={(e) => setLastWaterReading(parseInt(e.target.value) || 0)}
@@ -605,12 +646,138 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                     />
                   </div>
                 </div>
+
+                <div className="form-group">
+                  <label>Attach Documents (PDF or Image)</label>
+                  <input
+                    type="file"
+                    accept=".pdf,image/*"
+                    multiple
+                    onChange={handleNewDocumentSelect}
+                    className="form-control"
+                    style={{ padding: '8px' }}
+                  />
+                  {newDocuments.length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {newDocuments.map(doc => (
+                        <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+                          <Paperclip size={12} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => setNewDocuments(prev => prev.filter(d => d.id !== doc.id))}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', display: 'flex' }}
+                            title="Remove"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsAddModalOpen(false)}>Cancel</button>
+                <button type="button" className="btn btn-secondary" onClick={() => { setIsAddModalOpen(false); setNewDocuments([]); }}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Save Shade</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: View Shade Details */}
+      {viewingShade && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Shade Details — {viewingShade.id}</h3>
+              <button className="modal-close" onClick={() => setViewingShade(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Status</span>
+                  <span className={`badge badge-${viewingShade.status}`}>{viewingShade.status}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Block / Floor</span>
+                  <strong>{viewingShade.block} • {viewingShade.floor}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Size</span>
+                  <strong>{viewingShade.sqFt} Sq Ft</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Owner</span>
+                  <strong>{getOwnerName(viewingShade.ownerId)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Tenant / Renter</span>
+                  <strong>{getOwnerName(viewingShade.renterId)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>2-Month Maintenance Rate</span>
+                  <strong>₹{viewingShade.fixedMaintenance}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Last Water Reading</span>
+                  <strong>{viewingShade.lastWaterReading} units</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Late Fines</span>
+                  <strong style={{ color: viewingShade.penaltyDisabled ? 'var(--color-pending)' : 'inherit' }}>
+                    {viewingShade.penaltyDisabled ? `Paused${viewingShade.penaltyDisabledReason ? ' — ' + viewingShade.penaltyDisabledReason : ''}` : 'Active'}
+                  </strong>
+                </div>
+                {viewingShade.transferFeeTriggered && (
+                  <div style={{ color: 'var(--color-danger)', fontWeight: '600', fontSize: '11px' }}>
+                    ⚠️ One-time Transfer Fee (₹2,500) pending in next bill
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: '16px' }}>
+                <h4 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', marginBottom: '10px' }}>
+                  Attached Documents
+                </h4>
+                {(viewingShade.documents || []).length === 0 ? (
+                  <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>No documents attached yet.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {(viewingShade.documents || []).map(doc => (
+                      <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '8px 10px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+                        <Paperclip size={14} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
+                        <div style={{ flex: 1, overflow: 'hidden' }}>
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{doc.name}</div>
+                          <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Uploaded {doc.uploadedDate}</div>
+                        </div>
+                        <a
+                          href={doc.dataUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          download={doc.name}
+                          className="btn btn-secondary btn-sm"
+                          title="View / Download document"
+                        >
+                          <Download size={12} />
+                        </a>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setViewingShade(null)}>Close</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => { setEditingShade(viewingShade); setViewingShade(null); }}
+              >
+                <Edit2 size={14} /> Edit Shade
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -686,30 +853,28 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   <>
                     <div className="form-group">
                       <label>Assigned Owner</label>
-                      <select 
-                        className="form-control"
-                        value={editingShade.ownerId || ''}
-                        onChange={(e) => setEditingShade({ ...editingShade, ownerId: e.target.value || null })}
-                      >
-                        <option value="">-- Unassigned --</option>
-                        {owners.filter(o => o.type === 'owner').map(o => (
-                          <option key={o.id} value={o.id}>{o.name}</option>
-                        ))}
-                      </select>
+                      <CustomDropdown
+                        options={[{ value: '', label: '-- Unassigned --' }, ...owners.filter(o => o.type === 'owner').map(o => ({ value: o.id, label: o.name, subLabel: o.phone || undefined }))]}
+                        selectedValue={editingShade.ownerId || ''}
+                        onChange={(val) => setEditingShade({ ...editingShade, ownerId: val || null })}
+                        placeholder="-- Unassigned --"
+                        searchPlaceholder="Search owner..."
+                        sortMode="alpha"
+                        showAlphabetSidebar
+                      />
                     </div>
 
                     <div className="form-group">
                       <label>Assigned Tenant / Renter</label>
-                      <select 
-                        className="form-control"
-                        value={editingShade.renterId || ''}
-                        onChange={(e) => setEditingShade({ ...editingShade, renterId: e.target.value || null })}
-                      >
-                        <option value="">-- Unassigned --</option>
-                        {owners.filter(o => o.type === 'renter').map(o => (
-                          <option key={o.id} value={o.id}>{o.name}</option>
-                        ))}
-                      </select>
+                      <CustomDropdown
+                        options={[{ value: '', label: '-- Unassigned --' }, ...owners.filter(o => o.type === 'renter').map(o => ({ value: o.id, label: o.name, subLabel: o.phone || undefined }))]}
+                        selectedValue={editingShade.renterId || ''}
+                        onChange={(val) => setEditingShade({ ...editingShade, renterId: val || null })}
+                        placeholder="-- Unassigned --"
+                        searchPlaceholder="Search renter..."
+                        sortMode="alpha"
+                        showAlphabetSidebar
+                      />
                     </div>
                   </>
                 )}
@@ -738,17 +903,42 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   </div>
                 </div>
 
-                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+                {editingShade.penaltyDisabled && (
+                  <div style={{ marginTop: '8px', padding: '10px 14px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '12px', color: '#92400e' }}>
+                    Late fines are paused for this shade{editingShade.penaltyDisabledReason ? ` — ${editingShade.penaltyDisabledReason}` : ''}. Manage this from the Fines module.
+                  </div>
+                )}
+
+                <div className="form-group" style={{ marginTop: '8px' }}>
+                  <label>Attach Documents (PDF or Image)</label>
                   <input
-                    type="checkbox"
-                    id="penaltyDisabled"
-                    checked={editingShade.penaltyDisabled === true}
-                    onChange={(e) => setEditingShade({ ...editingShade, penaltyDisabled: e.target.checked })}
-                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                    type="file"
+                    accept=".pdf,image/*"
+                    multiple
+                    onChange={handleEditDocumentSelect}
+                    className="form-control"
+                    style={{ padding: '8px' }}
                   />
-                  <label htmlFor="penaltyDisabled" style={{ margin: '0', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
-                    Disable auto-penalty for this shade (skip late fine generation)
-                  </label>
+                  {(editingShade.documents || []).length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {(editingShade.documents || []).map(doc => (
+                        <div key={doc.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '6px 10px', backgroundColor: '#f8fafc', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+                          <Paperclip size={12} style={{ flexShrink: 0, color: 'var(--text-secondary)' }} />
+                          <a href={doc.dataUrl} target="_blank" rel="noreferrer" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--primary)' }}>
+                            {doc.name}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => setEditingShade({ ...editingShade, documents: (editingShade.documents || []).filter(d => d.id !== doc.id) })}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)', display: 'flex' }}
+                            title="Remove"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Water Reading History from past invoices */}
@@ -894,7 +1084,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                     required
                   />
                   <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
-                    Calculated consumption: <strong>{Math.max(0, newWaterVal - updatingWaterShade.lastWaterReading)} units</strong>. Total water billing: <strong>₹{Math.max(0, newWaterVal - updatingWaterShade.lastWaterReading) * 30}</strong> (at ₹30 per unit).
+                    Calculated consumption: <strong>{Math.max(0, newWaterVal - updatingWaterShade.lastWaterReading)} units</strong>. Total water billing: <strong>₹{Math.max(0, newWaterVal - updatingWaterShade.lastWaterReading) * (settings?.waterRate || 30)}</strong> (at ₹{settings?.waterRate || 30}/unit).
                   </span>
                 </div>
               </div>

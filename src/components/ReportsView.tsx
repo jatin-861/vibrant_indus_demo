@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Download, FileText, TrendingUp, AlertTriangle, DollarSign, CheckCircle, Clock, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import type { Invoice, Payment, FineRecord, Shade, Owner } from '../types';
+import type { Invoice, Payment, FineRecord, Shade, Owner, SystemSettings } from '../types';
 
 interface ReportsViewProps {
   invoices: Invoice[];
@@ -9,6 +9,7 @@ interface ReportsViewProps {
   fines: FineRecord[];
   shades: Shade[];
   owners: Owner[];
+  settings?: SystemSettings;
 }
 
 type ReportType = 'monthly_collection' | 'penalty' | 'additional_charges' | 'payment_performance';
@@ -17,7 +18,7 @@ const formatCurrency = (val: number) =>
   new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(val);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-export const ReportsView: React.FC<ReportsViewProps> = ({ invoices, payments: _payments, fines, shades, owners: _owners }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ invoices, payments: _payments, fines, shades, owners: _owners, settings }) => {
   const [activeReport, setActiveReport] = useState<ReportType>('monthly_collection');
   const [monthFilter, setMonthFilter] = useState('');
 
@@ -162,7 +163,156 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ invoices, payments: _p
   };
 
   const exportToPDF = () => {
-    window.print();
+    const reportTitle = activeReport === 'monthly_collection' ? 'Monthly Collection Report'
+      : activeReport === 'penalty' ? 'Penalty & Fines Report'
+      : activeReport === 'additional_charges' ? 'Additional Charges Report'
+      : 'Payment Performance Report';
+
+    const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const tableRows = activeReport === 'monthly_collection'
+      ? filteredMonthly.map(r => `
+          <tr>
+            <td>${r.month}</td>
+            <td>${r.count}</td>
+            <td class="num">₹${r.billed.toLocaleString('en-IN')}</td>
+            <td class="num green">₹${r.collected.toLocaleString('en-IN')}</td>
+            <td class="num orange">₹${r.pending.toLocaleString('en-IN')}</td>
+            <td class="num red">₹${r.overdue.toLocaleString('en-IN')}</td>
+          </tr>`).join('')
+      : activeReport === 'penalty'
+      ? penaltyData.map(r => `
+          <tr>
+            <td>${r.id}</td>
+            <td>${r.shadeLabel}</td>
+            <td>${r.ownerName}</td>
+            <td class="num red">₹${r.amount.toLocaleString('en-IN')}</td>
+            <td>${r.reason}</td>
+            <td>${r.date}</td>
+            <td><span class="badge ${r.status === 'paid' ? 'green' : 'red'}">${r.status.toUpperCase()}</span></td>
+          </tr>`).join('')
+      : activeReport === 'additional_charges'
+      ? additionalData.map(r => `
+          <tr>
+            <td>${r.invoiceId}</td>
+            <td>${r.shadeLabel}</td>
+            <td>${r.date}</td>
+            <td class="num">${r.waterCharge > 0 ? '₹' + r.waterCharge.toLocaleString('en-IN') : '—'}</td>
+            <td class="num">${r.transferFee > 0 ? '₹' + r.transferFee.toLocaleString('en-IN') : '—'}</td>
+            <td>${r.otherName || '—'}</td>
+            <td class="num">${r.otherCharge > 0 ? '₹' + r.otherCharge.toLocaleString('en-IN') : '—'}</td>
+          </tr>`).join('')
+      : performanceData.map(r => `
+          <tr>
+            <td>${r.invoiceId}</td>
+            <td>${r.shadeLabel}</td>
+            <td>${r.ownerName}</td>
+            <td class="num">₹${r.totalAmount.toLocaleString('en-IN')}</td>
+            <td>${r.dueDate}</td>
+            <td>${r.paymentDate || '—'}</td>
+            <td><span class="badge ${r.performance === 'paid_on_time' ? 'green' : r.performance === 'paid_late' ? 'orange' : 'red'}">${r.performance === 'paid_on_time' ? 'On Time' : r.performance === 'paid_late' ? 'Late' : 'Unpaid'}</span></td>
+          </tr>`).join('');
+
+    const headers = activeReport === 'monthly_collection'
+      ? '<th>Month</th><th>Invoices</th><th>Total Billed</th><th>Collected</th><th>Pending</th><th>Overdue</th>'
+      : activeReport === 'penalty'
+      ? '<th>Fine ID</th><th>Shade</th><th>Owner</th><th>Amount</th><th>Reason</th><th>Date</th><th>Status</th>'
+      : activeReport === 'additional_charges'
+      ? '<th>Invoice</th><th>Shade</th><th>Date</th><th>Water</th><th>Transfer Fee</th><th>Other Name</th><th>Other Amount</th>'
+      : '<th>Invoice</th><th>Shade</th><th>Owner</th><th>Amount</th><th>Due Date</th><th>Paid Date</th><th>Performance</th>';
+
+    const summaryBlock = activeReport === 'monthly_collection'
+      ? `<div class="summary-grid">
+          <div class="summary-box"><div class="label">Total Billed</div><div class="val">₹${filteredMonthly.reduce((s,r)=>s+r.billed,0).toLocaleString('en-IN')}</div></div>
+          <div class="summary-box green"><div class="label">Collected</div><div class="val">₹${filteredMonthly.reduce((s,r)=>s+r.collected,0).toLocaleString('en-IN')}</div></div>
+          <div class="summary-box orange"><div class="label">Pending</div><div class="val">₹${filteredMonthly.reduce((s,r)=>s+r.pending,0).toLocaleString('en-IN')}</div></div>
+          <div class="summary-box red"><div class="label">Overdue</div><div class="val">₹${filteredMonthly.reduce((s,r)=>s+r.overdue,0).toLocaleString('en-IN')}</div></div>
+        </div>`
+      : activeReport === 'penalty'
+      ? `<div class="summary-grid">
+          <div class="summary-box green"><div class="label">Penalty Collected</div><div class="val">₹${totalPenaltyCollected.toLocaleString('en-IN')}</div></div>
+          <div class="summary-box red"><div class="label">Penalty Outstanding</div><div class="val">₹${totalPenaltyOutstanding.toLocaleString('en-IN')}</div></div>
+          <div class="summary-box"><div class="label">Total Records</div><div class="val">${penaltyData.length}</div></div>
+        </div>`
+      : activeReport === 'additional_charges'
+      ? `<div class="summary-grid">
+          <div class="summary-box"><div class="label">Water Charges</div><div class="val">₹${totalWater.toLocaleString('en-IN')}</div></div>
+          <div class="summary-box"><div class="label">Transfer Fees</div><div class="val">₹${totalTransfer.toLocaleString('en-IN')}</div></div>
+          <div class="summary-box"><div class="label">Other Charges</div><div class="val">₹${totalOther.toLocaleString('en-IN')}</div></div>
+        </div>`
+      : `<div class="summary-grid">
+          <div class="summary-box green"><div class="label">Paid On Time</div><div class="val">${paidOnTime}</div></div>
+          <div class="summary-box orange"><div class="label">Paid Late</div><div class="val">${paidLate}</div></div>
+          <div class="summary-box red"><div class="label">Unpaid</div><div class="val">${unpaid}</div></div>
+        </div>`;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${reportTitle}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1e293b; background: #fff; font-size: 12px; }
+    .page { padding: 32px 40px; max-width: 900px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px double #cbd5e1; padding-bottom: 16px; margin-bottom: 20px; }
+    .society-name { font-size: 20px; font-weight: 800; color: #0f172a; }
+    .society-sub { font-size: 11px; color: #64748b; margin-top: 3px; }
+    .report-meta { text-align: right; }
+    .report-title { font-size: 16px; font-weight: 700; color: #1d4ed8; }
+    .report-date { font-size: 10px; color: #64748b; margin-top: 3px; }
+    .summary-grid { display: flex; gap: 12px; margin-bottom: 20px; }
+    .summary-box { flex: 1; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px 14px; background: #f8fafc; }
+    .summary-box.green { border-color: #86efac; background: #f0fdf4; }
+    .summary-box.red { border-color: #fca5a5; background: #fef2f2; }
+    .summary-box.orange { border-color: #fcd34d; background: #fffbeb; }
+    .summary-box .label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; }
+    .summary-box .val { font-size: 18px; font-weight: 800; color: #0f172a; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    thead tr { background: #1e293b; color: #fff; }
+    th { padding: 9px 10px; text-align: left; font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+    td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    .num { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .green { color: #16a34a; }
+    .red { color: #dc2626; }
+    .orange { color: #d97706; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+    .badge.green { background: #dcfce7; color: #16a34a; }
+    .badge.red { background: #fee2e2; color: #dc2626; }
+    .badge.orange { background: #fef3c7; color: #d97706; }
+    .footer { margin-top: 28px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="society-name">${settings?.societyName || 'Fortune Industrial Park'}</div>
+        <div class="society-sub">Society Management System · Financial Report</div>
+      </div>
+      <div class="report-meta">
+        <div class="report-title">${reportTitle}</div>
+        <div class="report-date">Generated: ${today}</div>
+      </div>
+    </div>
+    ${summaryBlock}
+    <table>
+      <thead><tr>${headers}</tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    <div class="footer">
+      <span>${settings?.societyName || 'Fortune Industrial Park'} · Society Management System</span>
+      <span>Report generated on ${today}</span>
+    </div>
+  </div>
+  <script>window.onload = function() { window.print(); }</script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank', 'width=950,height=700');
+    if (win) { win.document.write(html); win.document.close(); }
   };
 
   const REPORT_TABS: { key: ReportType; label: string; icon: React.ReactNode }[] = [

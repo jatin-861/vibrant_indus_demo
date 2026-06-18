@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Search,
   Trash2,
@@ -12,12 +12,15 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import type { Invoice, Shade, Owner, SystemSettings } from '../types';
+import { CustomDropdown } from './CustomDropdown';
+import { BulkInvoiceModal } from './BulkInvoiceModal';
 
 interface InvoicesViewProps {
   invoices: Invoice[];
   shades: Shade[];
   owners: Owner[];
   settings: SystemSettings;
+  currentDate: string;
   onGenerateSingleInvoice: (
     shadeId: string, 
     dueDate: string,
@@ -40,6 +43,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   shades,
   owners,
   settings,
+  currentDate,
   onGenerateSingleInvoice,
   onUpdateInvoiceStatus,
   onDeleteInvoice,
@@ -53,6 +57,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   
   const [isSingleGenOpen, setIsSingleGenOpen] = useState(false);
+  const [isBulkGenOpen, setIsBulkGenOpen] = useState(false);
   const [paymentLogInvoice, setPaymentLogInvoice] = useState<Invoice | null>(null);
   const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null);
   
@@ -60,13 +65,27 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [originalInvoiceId, setOriginalInvoiceId] = useState('');
 
+  // Export wizard states
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<'particular' | 'all' | 'custom' | ''>('');
+  const [exportShadeId, setExportShadeId] = useState('');
+  const [exportCustomShadeIds, setExportCustomShadeIds] = useState<string[]>([]);
+  const [exportPeriod, setExportPeriod] = useState<'2' | '4' | '6' | '12' | ''>('');
+
   // Individual Form states
   const [selectedShadeId, setSelectedShadeId] = useState('');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 5);
+    d.setDate(d.getDate() + settings.gracePeriodDays);
     return d.toISOString().split('T')[0];
   });
+
+  // Re-sync default due date when grace period setting changes
+  useEffect(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + settings.gracePeriodDays);
+    setDueDate(d.toISOString().split('T')[0]);
+  }, [settings.gracePeriodDays]);
   const [newWaterReading, setNewWaterReading] = useState<number>(0);
   const [otherName, setOtherName] = useState('');
   const [otherCharge, setOtherCharge] = useState<number>(0);
@@ -148,15 +167,22 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     e.preventDefault();
     if (!paymentLogInvoice) return;
 
-    onUpdateInvoiceStatus(
-      paymentLogInvoice.id, 
-      'paid', 
-      paymentMethod, 
-      transactionRef || (paymentMethod === 'cheque' ? 'Cheque Payment Logged' : 'Office Cash Payment')
-    );
-    
+    const details = transactionRef || (paymentMethod === 'cheque' ? 'Cheque Payment Logged' : 'Office Cash Payment');
+
+    onUpdateInvoiceStatus(paymentLogInvoice.id, 'paid', paymentMethod, details);
+
+    // Build paid snapshot to auto-open receipt immediately
+    const receiptSnapshot: Invoice = {
+      ...paymentLogInvoice,
+      status: 'paid',
+      paymentMethod,
+      paymentDate: new Date().toISOString().split('T')[0],
+      transactionDetails: details
+    };
+
     setPaymentLogInvoice(null);
     setTransactionRef('');
+    setViewingInvoice(receiptSnapshot); // auto-open receipt
   };
 
   const handleEditInvoiceSubmit = (e: React.FormEvent) => {
@@ -178,19 +204,65 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     setEditingInvoice(null);
   };
 
-  const handleExportCSV = () => {
-    const header = "id,shadeId,ownerName,renterName,maintenanceFee,waterUsageCharge,otherMaintenanceCharge,otherMaintenanceName,transferFee,fineAmount,totalAmount,generatedDate,dueDate,status,paymentMethod,paymentDate\n";
-    const csvContent = invoices.map(i => 
-      `${i.id},${i.shadeId},"${i.ownerName || ''}","${i.renterName || ''}",${i.maintenanceFee},${i.waterUsageCharge},${i.otherMaintenanceCharge},"${i.otherMaintenanceName || ''}",${i.transferFee},${i.fineAmount},${i.totalAmount},${i.generatedDate},${i.dueDate},${i.status},${i.paymentMethod || ''},${i.paymentDate || ''}`
-    ).join("\n");
-    
-    const blob = new Blob([header + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `invoices_export_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const resetExportWizard = () => {
+    setIsExportModalOpen(false);
+    setExportScope('');
+    setExportShadeId('');
+    setExportCustomShadeIds([]);
+    setExportPeriod('');
+  };
+
+  const handleConfirmExport = () => {
+    if (!exportScope || !exportPeriod) return;
+
+    // Anchor on the app's simulated business date, not the real system clock —
+    // demo/seeded invoices are dated against currentDate, not "today" in the real world.
+    const cutoff = new Date(currentDate);
+    cutoff.setMonth(cutoff.getMonth() - parseInt(exportPeriod, 10));
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+
+    const scopedInvoices = invoices.filter(i => {
+      if (exportScope === 'particular' && i.shadeId !== exportShadeId) return false;
+      if (exportScope === 'custom' && !exportCustomShadeIds.includes(i.shadeId)) return false;
+      return i.generatedDate >= cutoffStr;
+    });
+
+    // Build a real .xlsx (not a raw .csv) — Excel auto-converts ISO date strings in CSVs
+    // into its internal date type and mis-sizes the column, showing "########".
+    // Setting explicit column widths on a proper worksheet avoids that entirely.
+    const data = scopedInvoices.map(i => ({
+      'Invoice No': i.id,
+      'Shade': i.shadeId,
+      'Owner': i.ownerName,
+      'Renter': i.renterName || '',
+      'Maintenance (₹)': i.maintenanceFee,
+      'Water Charge (₹)': i.waterUsageCharge,
+      'Other Charge (₹)': i.otherMaintenanceCharge,
+      'Other Charge Name': i.otherMaintenanceName || '',
+      'Transfer Fee (₹)': i.transferFee,
+      'Fine (₹)': i.fineAmount,
+      'Total (₹)': i.totalAmount,
+      'Generated Date': i.generatedDate,
+      'Due Date': i.dueDate,
+      'Status': i.status,
+      'Payment Method': i.paymentMethod || '',
+      'Payment Date': i.paymentDate || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [
+      { wch: 16 }, { wch: 10 }, { wch: 20 }, { wch: 20 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 },
+      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 14 },
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Invoices');
+
+    const scopeLabel = exportScope === 'particular' ? exportShadeId : exportScope === 'custom' ? `custom-${exportCustomShadeIds.length}shades` : 'all-shades';
+    XLSX.writeFile(wb, `invoices_export_${scopeLabel}_${exportPeriod}mo_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    resetExportWizard();
   };
 
   const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,9 +347,15 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   const previewWaterUnits = Math.max(0, newWaterReading - previewOldWater);
   const previewWaterCharge = previewWaterUnits * settings.waterRate;
   
-  const previewFixedMaintenance = previewShade ? Math.round((previewShade.fixedMaintenance / 2) * billingMonths) : 0;
+  const previewFixedMaintenance = previewShade ? Math.round((settings.defaultMaintenance / 2) * billingMonths) : 0;
   const previewTransferFee = previewShade && previewShade.transferFeeTriggered ? settings.transferFee : 0;
   const previewTotal = previewFixedMaintenance + previewWaterCharge + otherCharge + previewTransferFee;
+  const paymentMethodOptions = [
+    { value: 'cash', label: '💵 Cash', subLabel: 'Collected at Office' },
+    { value: 'cheque', label: '✍️ Cheque', subLabel: 'Deposit Details' },
+    { value: 'online', label: '⚡ UPI', subLabel: 'Simulated Payment' },
+    { value: 'bank_transfer', label: '🏦 Bank Transfer', subLabel: 'Direct Bank Deposit' }
+  ];
 
   return (
     <div className="invoices-view">
@@ -309,8 +387,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             <option value="cancelled">Cancelled</option>
           </select>
 
-          <button className="btn btn-secondary" onClick={handleExportCSV}>
-            Export CSV
+          <button className="btn btn-secondary" onClick={() => setIsExportModalOpen(true)}>
+            <Download size={16} /> Export Invoices
           </button>
 
           <label className="btn btn-secondary" style={{ cursor: 'pointer', margin: 0 }}>
@@ -318,6 +396,9 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             <input type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={handleImportCSV} />
           </label>
 
+          <button className="btn btn-secondary" onClick={() => setIsBulkGenOpen(true)}>
+            <Plus size={16} /> Bulk Generate
+          </button>
           <button className="btn btn-primary" onClick={() => setIsSingleGenOpen(true)}>
             <Plus size={16} /> Individual Invoice
           </button>
@@ -335,128 +416,267 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
               <th>MAINTENANCE</th>
               <th>LATE FINE</th>
               <th>TOTAL DUE</th>
+              <th>GENERATED</th>
               <th>DUE DATE</th>
               <th>STATUS</th>
               <th>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
-            {filteredInvoices.map(inv => {
-              // Combined maintenance column = maintenanceFee + waterUsageCharge + otherMaintenanceCharge + transferFee
-              const combinedMaintenance = inv.maintenanceFee + inv.waterUsageCharge + inv.otherMaintenanceCharge + inv.transferFee;
-              const tenantDisplay = inv.renterName || inv.ownerName;
-              return (
-                <tr key={inv.id}>
-                  <td><strong>{inv.id}</strong></td>
-                  <td>
-                    <div>
-                      <strong>{tenantDisplay}</strong>
-                      {inv.renterName && (
-                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block' }}>
-                          Owner: {inv.ownerName}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td><strong>{inv.shadeId}</strong></td>
-                  <td>
-                    {combinedMaintenance > 0 ? (
-                      <span title={`Base: ${inv.maintenanceFee}, Water: ${inv.waterUsageCharge}, Other: ${inv.otherMaintenanceCharge}, Transfer: ${inv.transferFee}`}>
-                        {formatCurrency(combinedMaintenance)}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>₹0</span>
-                    )}
-                  </td>
-                  <td>
-                    {inv.fineAmount > 0 ? (
-                      <span className="text-danger" style={{ fontWeight: '600' }}>
-                        {formatCurrency(inv.fineAmount)}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>—</span>
-                    )}
-                  </td>
-                  <td><strong>{formatCurrency(inv.totalAmount)}</strong></td>
-                  <td>{inv.dueDate}</td>
-                  <td>
-                    <span className={`badge badge-${inv.status}`}>
-                      {inv.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                        <button 
-                          className="btn btn-success btn-sm"
-                          title="Record Cash/Cheque Payment"
-                          onClick={() => setPaymentLogInvoice(inv)}
-                          style={{ padding: '4px 8px' }}
-                        >
-                          <CheckSquare size={12} /> Log
-                        </button>
-                      )}
-                      
-                      {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                        <button 
-                          className="btn btn-secondary btn-sm"
-                          title="Dispatch WhatsApp Invoice & QR Link"
-                          onClick={() => onSendWhatsApp(inv.id)}
-                          style={{ color: '#075e54', borderColor: '#075e54', padding: '4px 8px' }}
-                        >
-                          <MessageSquare size={12} /> Send
-                        </button>
-                      )}
-
-                      <button 
-                        className="btn btn-secondary btn-sm"
-                        title="Print / View Invoice Details"
-                        onClick={() => setViewingInvoice(inv)}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        <FileText size={12} /> View
-                      </button>
-
-                      <button 
-                        className="btn btn-secondary btn-sm"
-                        title="Edit Invoice Details"
-                        onClick={() => {
-                          setEditingInvoice(inv);
-                          setOriginalInvoiceId(inv.id);
-                        }}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        <Edit2 size={12} /> Edit
-                      </button>
-
-                      <button 
-                        className="btn btn-secondary btn-sm text-danger"
-                        title="Cancel Invoice"
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to cancel invoice ${inv.id}?`)) {
-                            onDeleteInvoice(inv.id);
-                          }
-                        }}
-                        style={{ padding: '4px 8px' }}
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-
-            {filteredInvoices.length === 0 && (
+            {filteredInvoices.length === 0 ? (
               <tr>
                 <td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                   No invoices found matching the search criteria.
                 </td>
               </tr>
-            )}
+            ) : (() => {
+              // Sort newest-first then group by year
+              const idOrder = (id: string) => {
+                const m = id.match(/(\d{4})-0*(\d+)$/);
+                return m ? parseInt(m[1]) * 10000 + parseInt(m[2]) : 0;
+              };
+              const sorted = [...filteredInvoices].sort((a, b) => idOrder(b.id) - idOrder(a.id));
+              const groups: { year: number; invoices: typeof sorted }[] = [];
+              for (const inv of sorted) {
+                const yr = parseInt(inv.generatedDate.split('-')[0]);
+                const g = groups.find(x => x.year === yr);
+                if (g) g.invoices.push(inv); else groups.push({ year: yr, invoices: [inv] });
+              }
+              return groups.map((group, groupIdx) => (
+                <React.Fragment key={group.year}>
+                  {/* Year header / divider row */}
+                  <tr>
+                    <td colSpan={10} style={{ padding: 0, border: 'none', backgroundColor: 'var(--bg-main)' }}>
+                      {groupIdx === 0 ? (
+                        <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: '6px', padding: '2px 10px', fontSize: '12px', fontWeight: '800' }}>{group.year}</span>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>{group.invoices.length} invoice{group.invoices.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '16px 16px 6px' }}>
+                          <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)' }} />
+                          <span style={{ fontSize: '11px', fontWeight: '700', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+                            Year {group.year} · {group.invoices.length} invoice{group.invoices.length !== 1 ? 's' : ''}
+                          </span>
+                          <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-color)' }} />
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                  {group.invoices.map(inv => {
+                    const combinedMaintenance = inv.maintenanceFee + inv.waterUsageCharge + inv.otherMaintenanceCharge + inv.transferFee;
+                    const tenantDisplay = inv.renterName || inv.ownerName;
+                    return (
+                      <tr key={inv.id}>
+                        <td><strong>{inv.id}</strong></td>
+                        <td>
+                          <div>
+                            <strong>{tenantDisplay}</strong>
+                            {inv.renterName && (
+                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', display: 'block' }}>
+                                Owner: {inv.ownerName}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td><strong>{inv.shadeId}</strong></td>
+                        <td>
+                          {combinedMaintenance > 0 ? (
+                            <span title={`Base: ${inv.maintenanceFee}, Water: ${inv.waterUsageCharge}, Other: ${inv.otherMaintenanceCharge}, Transfer: ${inv.transferFee}`}>
+                              {formatCurrency(combinedMaintenance)}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>₹0</span>
+                          )}
+                        </td>
+                        <td>
+                          {inv.fineAmount > 0 ? (
+                            <span className="text-danger" style={{ fontWeight: '600' }}>
+                              {formatCurrency(inv.fineAmount)}
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                        <td><strong>{formatCurrency(inv.totalAmount)}</strong></td>
+                        <td style={{ color: 'var(--text-secondary)' }}>{inv.generatedDate}</td>
+                        <td>{inv.dueDate}</td>
+                        <td>
+                          <span className={`badge badge-${inv.status}`}>{inv.status}</span>
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '4px' }}>
+                            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                              <button
+                                className="btn btn-success btn-sm"
+                                title="Generate Payment Receipt"
+                                onClick={() => setPaymentLogInvoice(inv)}
+                                style={{ padding: '4px 8px' }}
+                              >
+                                <CheckSquare size={12} /> Paid
+                              </button>
+                            )}
+                            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                title="Dispatch WhatsApp Invoice & QR Link"
+                                onClick={() => onSendWhatsApp(inv.id)}
+                                style={{ color: '#075e54', borderColor: '#075e54', padding: '4px 8px' }}
+                              >
+                                <MessageSquare size={12} /> Send
+                              </button>
+                            )}
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              title="Print / View Invoice Details"
+                              onClick={() => setViewingInvoice(inv)}
+                              style={{ padding: '4px 8px' }}
+                            >
+                              <FileText size={12} /> View
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm"
+                              title="Edit Invoice Details"
+                              onClick={() => { setEditingInvoice(inv); setOriginalInvoiceId(inv.id); }}
+                              style={{ padding: '4px 8px' }}
+                            >
+                              <Edit2 size={12} /> Edit
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm text-danger"
+                              title="Cancel Invoice"
+                              onClick={() => { if (confirm(`Are you sure you want to cancel invoice ${inv.id}?`)) onDeleteInvoice(inv.id); }}
+                              style={{ padding: '4px 8px' }}
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              ));
+            })()
+            }
           </tbody>
         </table>
       </div>
+
+      {isBulkGenOpen && (
+        <BulkInvoiceModal
+          shades={shades}
+          owners={owners}
+          settings={settings}
+          invoices={invoices}
+          onClose={() => setIsBulkGenOpen(false)}
+          onGenerateSingleInvoice={onGenerateSingleInvoice}
+        />
+      )}
+
+      {/* MODAL: Export Invoices Wizard */}
+      {isExportModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Export Invoices</h3>
+              <button className="modal-close" onClick={resetExportWizard}>×</button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="form-group">
+                <label>1. Which shades?</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${exportScope === 'particular' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setExportScope('particular')}
+                  >
+                    Particular Shade
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${exportScope === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setExportScope('all')}
+                  >
+                    All Shades
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${exportScope === 'custom' ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setExportScope('custom')}
+                  >
+                    Custom Selection
+                  </button>
+                </div>
+              </div>
+
+              {exportScope === 'particular' && (
+                <div className="form-group">
+                  <label>Select Shade</label>
+                  <CustomDropdown
+                    options={shades.map(s => ({ value: s.id, label: s.id }))}
+                    selectedValue={exportShadeId}
+                    onChange={setExportShadeId}
+                    placeholder="-- Choose Shade --"
+                    searchPlaceholder="Search shade..."
+                    sortMode="numeric-id"
+                  />
+                </div>
+              )}
+
+              {exportScope === 'custom' && (
+                <div className="form-group">
+                  <label>Select Shades ({exportCustomShadeIds.length} selected)</label>
+                  <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {shades.map(s => (
+                      <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', cursor: 'pointer', margin: 0, fontWeight: 'normal' }}>
+                        <input
+                          type="checkbox"
+                          checked={exportCustomShadeIds.includes(s.id)}
+                          onChange={(e) => {
+                            setExportCustomShadeIds(prev => e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id));
+                          }}
+                          style={{ width: '14px', height: '14px', cursor: 'pointer' }}
+                        />
+                        {s.id} <span style={{ color: 'var(--text-secondary)' }}>({s.block} · {s.floor})</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(exportScope === 'all' || (exportScope === 'particular' && exportShadeId) || (exportScope === 'custom' && exportCustomShadeIds.length > 0)) && (
+                <div className="form-group">
+                  <label>2. Time period</label>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {[{ v: '2', l: 'Last 2 Months' }, { v: '4', l: 'Last 4 Months' }, { v: '6', l: 'Last 6 Months' }, { v: '12', l: 'Last 1 Year' }].map(p => (
+                      <button
+                        key={p.v}
+                        type="button"
+                        className={`btn btn-sm ${exportPeriod === p.v ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setExportPeriod(p.v as '2' | '4' | '6' | '12')}
+                      >
+                        {p.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={resetExportWizard}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!exportPeriod || !exportScope || (exportScope === 'particular' && !exportShadeId) || (exportScope === 'custom' && exportCustomShadeIds.length === 0)}
+                onClick={handleConfirmExport}
+              >
+                <Download size={16} /> Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: Individual Invoice Generation (with Live Preview) */}
       {isSingleGenOpen && (
@@ -468,64 +688,60 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             </div>
             
             <form onSubmit={handleSingleGenSubmit}>
-              <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: selectedShadeId ? '1.2fr 1fr' : '1fr', gap: '32px', padding: '32px' }}>
+              <div className="modal-body" style={{ display: 'grid', gridTemplateColumns: selectedShadeId ? '1.2fr 1fr' : '1fr', gap: '32px', padding: '32px', minHeight: selectedShadeId ? 'auto' : '420px' }}>
                 
                 {/* Form Side */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div className="form-group">
                     <label>Select Shade / Unit*</label>
-                    <select 
-                      className="form-control"
+                    <CustomDropdown
+                      options={shades.filter(s => s.status === 'occupied').map(s => {
+                        const owner = owners.find(o => o.id === s.ownerId);
+                        const renter = s.renterId ? owners.find(o => o.id === s.renterId) : null;
+                        return {
+                          value: s.id,
+                          label: s.id,
+                          subLabel: renter ? `Tenant: ${renter.name} (Owner: ${owner?.name})` : `Owner: ${owner?.name || 'Unassigned'}`
+                        };
+                      })}
+                      selectedValue={selectedShadeId}
+                      onChange={handleShadeChange}
+                      placeholder="-- Choose Shade --"
+                      searchPlaceholder="Search unit, owner or tenant..."
                       required
-                      value={selectedShadeId}
-                      onChange={(e) => handleShadeChange(e.target.value)}
-                    >
-                      <option value="">-- Choose Shade --</option>
-                      {shades.filter(s => s.status === 'occupied').map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.id} (Owner: {owners.find(o => o.id === s.ownerId)?.name || 'Unassigned'})
-                        </option>
-                      ))}
-                    </select>
+                      sortMode="numeric-id"
+                    />
                   </div>
 
                   {selectedShadeId && (
                     <>
-                      {previewShade && previewShade.hasWaterSupply !== false ? (
-                        <>
-                          <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
-                            <div className="form-group" style={{ flex: 1 }}>
-                              <label>Old Water Reading (Units)</label>
-                              <input 
-                                type="number"
-                                className="form-control"
-                                readOnly
-                                value={previewOldWater}
-                              />
-                            </div>
-
-                            <div className="form-group" style={{ flex: 1 }}>
-                              <label>New Water Reading (Units)*</label>
-                              <input 
-                                type="number"
-                                className="form-control"
-                                required
-                                min={previewOldWater}
-                                value={newWaterReading}
-                                onChange={(e) => setNewWaterReading(parseInt(e.target.value) || 0)}
-                              />
-                            </div>
-                          </div>
-
-                          <div style={{ padding: '8px 12px', backgroundColor: 'var(--color-info-bg)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '6px', fontSize: '12px', color: 'var(--color-info)', fontWeight: '500', marginBottom: '12px' }}>
-                            Calculated consumption: <strong>{previewWaterUnits} units</strong> (₹30/unit = ₹{previewWaterCharge})
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ padding: '10px 14px', backgroundColor: '#f1f5f9', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                          💧 No Water Supply registered for this unit. Water supply billing is bypassed.
+                      <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>Old Water Reading (Units)</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            readOnly
+                            value={previewOldWater}
+                          />
                         </div>
-                      )}
+
+                        <div className="form-group" style={{ flex: 1 }}>
+                          <label>New Water Reading (Units)*</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            required
+                            min={previewOldWater}
+                            value={newWaterReading}
+                            onChange={(e) => setNewWaterReading(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ padding: '8px 12px', backgroundColor: 'var(--color-info-bg)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '6px', fontSize: '12px', color: 'var(--color-info)', fontWeight: '500', marginBottom: '12px' }}>
+                        Consumption: <strong>{previewWaterUnits} units</strong> × ₹{settings.waterRate}/unit = <strong>₹{previewWaterCharge}</strong>
+                      </div>
 
                       <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
                         <div className="form-group" style={{ flex: 1 }}>
@@ -553,18 +769,20 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
                         <div className="form-group" style={{ flex: 1 }}>
                           <label>Billing Period*</label>
-                          <select 
-                            className="form-control"
-                            value={billingMonths}
-                            onChange={(e) => setBillingMonths(parseInt(e.target.value) || 2)}
-                          >
-                            <option value="1">1 Month</option>
-                            <option value="2">2 Months (Default)</option>
-                            <option value="3">3 Months</option>
-                            <option value="4">4 Months</option>
-                            <option value="6">6 Months</option>
-                            <option value="12">1 Year</option>
-                          </select>
+                          <CustomDropdown
+                            options={[
+                              { value: '1', label: '1 Month' },
+                              { value: '2', label: '2 Months (Default)' },
+                              { value: '3', label: '3 Months' },
+                              { value: '4', label: '4 Months' },
+                              { value: '6', label: '6 Months' },
+                              { value: '12', label: '1 Year' }
+                            ]}
+                            selectedValue={String(billingMonths)}
+                            onChange={(val) => setBillingMonths(parseInt(val) || 2)}
+                            placeholder="Select period"
+                            required
+                          />
                         </div>
 
                         <div className="form-group" style={{ flex: 1 }}>
@@ -623,7 +841,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         )}
                         {previewWaterCharge > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Water Charge ({previewWaterUnits} units × ₹30):</span>
+                            <span>Water Charge ({previewWaterUnits} units × ₹{settings.waterRate}):</span>
                             <strong>{formatCurrency(previewWaterCharge)}</strong>
                           </div>
                         )}
@@ -668,27 +886,24 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
         <div className="modal-overlay">
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Log Payment Receipt - {paymentLogInvoice.id}</h3>
+              <h3>Mark Invoice Paid - {paymentLogInvoice.id}</h3>
               <button className="modal-close" onClick={() => setPaymentLogInvoice(null)}>×</button>
             </div>
             <form onSubmit={handlePaymentSubmit}>
-              <div className="modal-body">
+              <div className="modal-body" style={{ minHeight: '420px' }}>
                 <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--color-success-bg)', borderRadius: 'var(--radius-md)', fontSize: '13px' }}>
                   Total Invoice Amount to Collect: <strong>{formatCurrency(paymentLogInvoice.totalAmount)}</strong>
                 </div>
 
                 <div className="form-group">
                   <label>Payment Method*</label>
-                  <select 
-                    className="form-control"
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value as 'cash' | 'cheque' | 'online' | 'bank_transfer')}
-                  >
-                    <option value="cash">💵 Cash (Collected at Office)</option>
-                    <option value="cheque">✍️ Cheque (Deposit Details)</option>
-                    <option value="online">⚡ UPI (Simulated Payment)</option>
-                    <option value="bank_transfer">🏦 Bank Transfer</option>
-                  </select>
+                  <CustomDropdown
+                    options={paymentMethodOptions}
+                    selectedValue={paymentMethod}
+                    onChange={(val) => setPaymentMethod(val as 'cash' | 'cheque' | 'online' | 'bank_transfer')}
+                    placeholder="Select payment method"
+                    required
+                  />
                 </div>
 
                 <div className="form-group">
@@ -705,7 +920,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setPaymentLogInvoice(null)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Verify & Log Paid</button>
+                <button type="submit" className="btn btn-primary">Verify & Mark Paid</button>
               </div>
             </form>
           </div>
@@ -806,41 +1021,28 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   </div>
                 </div>
 
-                {(() => {
-                  const editShade = shades.find(s => s.id === editingInvoice.shadeId);
-                  if (editShade && editShade.hasWaterSupply !== false) {
-                    return (
-                      <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
-                        <div className="form-group" style={{ flex: 1 }}>
-                          <label>Old Water Reading*</label>
-                          <input 
-                            type="number" 
-                            className="form-control"
-                            value={editingInvoice.oldWaterReading}
-                            onChange={(e) => setEditingInvoice({ ...editingInvoice, oldWaterReading: parseInt(e.target.value) || 0 })}
-                            required
-                          />
-                        </div>
-                        <div className="form-group" style={{ flex: 1 }}>
-                          <label>New Water Reading*</label>
-                          <input 
-                            type="number" 
-                            className="form-control"
-                            value={editingInvoice.newWaterReading}
-                            onChange={(e) => setEditingInvoice({ ...editingInvoice, newWaterReading: parseInt(e.target.value) || 0 })}
-                            required
-                          />
-                        </div>
-                      </div>
-                    );
-                  } else {
-                    return (
-                      <div style={{ padding: '10px', backgroundColor: '#f1f5f9', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                        💧 No Water Supply registered for this unit. Water supply billing is bypassed.
-                      </div>
-                    );
-                  }
-                })()}
+                <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>Old Water Reading*</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={editingInvoice.oldWaterReading}
+                      onChange={(e) => setEditingInvoice({ ...editingInvoice, oldWaterReading: parseInt(e.target.value) || 0 })}
+                      required
+                    />
+                  </div>
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label>New Water Reading*</label>
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={editingInvoice.newWaterReading}
+                      onChange={(e) => setEditingInvoice({ ...editingInvoice, newWaterReading: parseInt(e.target.value) || 0 })}
+                      required
+                    />
+                  </div>
+                </div>
 
                 <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
                   <div className="form-group" style={{ flex: 1 }}>
@@ -988,15 +1190,15 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
       {/* MODAL 5: View Invoice Details (Print Simulator Letterhead) */}
       {viewingInvoice && (
-        <div className="modal-overlay">
-          <div className="modal-content large" style={{ maxWidth: '850px' }}>
+        <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setViewingInvoice(null); }}>
+          <div className="modal-content large" style={{ maxWidth: '850px' }} onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Society Invoice Detail Print Panel</h3>
-              <button className="modal-close" onClick={() => setViewingInvoice(null)}>×</button>
+              <button type="button" className="modal-close" onClick={() => setViewingInvoice(null)}>×</button>
             </div>
             <div className="modal-body" style={{ backgroundColor: '#eaeef2', padding: '24px' }}>
               {/* Paper Invoice Mockup (Letterhead style) */}
-              <div id="printable-area" style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '40px', borderRadius: '4px', boxShadow: '0 8px 16px rgba(0,0,0,0.06)', fontFamily: 'Inter, system-ui, sans-serif', color: '#1e293b', position: 'relative' }}>
+              <div id="printable-area" style={{ backgroundColor: 'white', border: '1px solid #cbd5e1', padding: '32px 36px', borderRadius: '4px', boxShadow: '0 8px 16px rgba(0,0,0,0.06)', fontFamily: 'Inter, system-ui, sans-serif', color: '#1e293b', position: 'relative', maxWidth: '740px', margin: '0 auto' }}>
                 
                 {/* Ribbon decoration for status */}
                 <div style={{ position: 'absolute', top: '0', right: '40px', padding: '6px 16px', background: viewingInvoice.status === 'paid' ? '#10b981' : viewingInvoice.status === 'overdue' ? '#ef4444' : '#64748b', color: 'white', fontSize: '11px', fontWeight: '800', borderBottomLeftRadius: '6px', borderBottomRightRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -1058,22 +1260,29 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                         <td style={{ padding: '10px 8px' }}>
                           <strong>Fixed Infrastructure Maintenance</strong><br />
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>Common area facilities fee (₹350/month base multiplier)</span>
+                          <span style={{ fontSize: '10px', color: '#64748b' }}>
+                            Common area facilities fee — ₹{Math.round(viewingInvoice.maintenanceFee / viewingInvoice.billingMonths)}/month
+                          </span>
                         </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', color: '#64748b' }}>{viewingInvoice.billingMonths} mo × ₹350</td>
+                        <td style={{ padding: '10px 8px', textAlign: 'right', color: '#64748b' }}>
+                          {viewingInvoice.billingMonths} mo × ₹{Math.round(viewingInvoice.maintenanceFee / viewingInvoice.billingMonths)}
+                        </td>
                         <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(viewingInvoice.maintenanceFee)}</td>
                       </tr>
                     )}
-                    
+
                     {/* 3. Water Meter Charge */}
                     {viewingInvoice.newWaterReading > viewingInvoice.oldWaterReading && (
                       <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
                         <td style={{ padding: '10px 8px' }}>
                           <strong>Water Meter Supply Charge</strong><br />
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>Meter: {viewingInvoice.oldWaterReading} to {viewingInvoice.newWaterReading} units</span>
+                          <span style={{ fontSize: '10px', color: '#64748b' }}>
+                            Meter reading: {viewingInvoice.oldWaterReading} → {viewingInvoice.newWaterReading} units
+                            ({viewingInvoice.newWaterReading - viewingInvoice.oldWaterReading} units consumed)
+                          </span>
                         </td>
                         <td style={{ padding: '10px 8px', textAlign: 'right', color: '#64748b' }}>
-                          {viewingInvoice.newWaterReading - viewingInvoice.oldWaterReading} units × ₹30
+                          {viewingInvoice.newWaterReading - viewingInvoice.oldWaterReading} units × ₹{settings.waterRate}
                         </td>
                         <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(viewingInvoice.waterUsageCharge)}</td>
                       </tr>
@@ -1131,13 +1340,24 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       </div>
                     </div>
                     
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                      <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=upi://pay?pa=${settings.upiId}%26pn=${encodeURIComponent(settings.societyName)}%26am=${viewingInvoice.totalAmount}`} 
-                        alt="UPI Payment QR Code" 
-                        style={{ border: '1px solid #cbd5e1', padding: '4px', background: '#fff', borderRadius: '4px', width: '80px', height: '80px' }}
-                      />
-                      <span style={{ fontSize: '8px', color: '#94a3b8', marginTop: '4px', fontWeight: '700' }}>SCAN TO PAY UPI</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      {settings.upiId ? (
+                        <>
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`upi://pay?pa=${settings.upiId}&pn=${settings.societyName || 'Fortune Industrial Park'}&am=${viewingInvoice.totalAmount}&cu=INR&tn=Invoice-${viewingInvoice.id}`)}`}
+                            alt="UPI Payment QR"
+                            style={{ border: '1px solid #cbd5e1', padding: '4px', background: '#fff', borderRadius: '4px', width: '90px', height: '90px' }}
+                          />
+                          <span style={{ fontSize: '8px', color: '#94a3b8', fontWeight: '700', textAlign: 'center', lineHeight: '1.3' }}>
+                            SCAN & PAY<br />
+                            <span style={{ color: '#3b82f6' }}>Opens UPI app with<br />₹{viewingInvoice.totalAmount} pre-filled</span>
+                          </span>
+                        </>
+                      ) : (
+                        <div style={{ width: '90px', height: '90px', backgroundColor: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#94a3b8', textAlign: 'center', padding: '4px' }}>
+                          Set UPI ID<br />in Settings<br />to enable QR
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1182,22 +1402,70 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             </div>
             
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => {
+              <button type="button" className="btn btn-secondary" onClick={() => {
                 const el = document.getElementById('printable-area');
                 if (!el) return;
-                const win = window.open('', '_blank', 'width=900,height=700');
-                if (!win) return;
-                win.document.write(`<!DOCTYPE html><html><head><title>Invoice</title>
+
+                // Use hidden iframe so main window never loses focus
+                // Give it A4 width so scrollHeight measurement is accurate
+                const iframe = document.createElement('iframe');
+                iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;height:1px;border:0;visibility:hidden;';
+                document.body.appendChild(iframe);
+
+                const doc = iframe.contentDocument || iframe.contentWindow?.document;
+                if (!doc) { document.body.removeChild(iframe); return; }
+
+                doc.open();
+                doc.write(`<!DOCTYPE html><html><head><title>Invoice</title>
                   <style>
-                    body { font-family: Inter, system-ui, sans-serif; color: #1e293b; margin: 0; padding: 24px; }
+                    @page { size: A4 portrait; margin: 14mm 16mm; }
                     * { box-sizing: border-box; }
+                    html, body {
+                      margin: 0; padding: 0;
+                      background: #ffffff !important;
+                      font-family: Inter, system-ui, -apple-system, sans-serif;
+                      font-size: 13px;
+                      line-height: 1.6;
+                      color: #1e293b;
+                      -webkit-print-color-adjust: exact;
+                      print-color-adjust: exact;
+                    }
+                    #printable-area {
+                      width: 100% !important;
+                      max-width: 100% !important;
+                      min-height: unset !important;
+                      padding: 0 !important;
+                      border: none !important;
+                      border-radius: 0 !important;
+                      box-shadow: none !important;
+                      margin: 0 !important;
+                      background: #ffffff !important;
+                    }
+                    h1 { font-size: 22px !important; }
+                    h3 { font-size: 14px !important; }
                     table { width: 100%; border-collapse: collapse; }
-                    td, th { padding: 8px; }
-                    @media print { body { padding: 0; } }
-                  </style></head><body>${el.innerHTML}</body></html>`);
-                win.document.close();
-                win.focus();
-                setTimeout(() => { win.print(); win.close(); }, 400);
+                    td, th { padding: 10px 8px; font-size: 12px; }
+                    th { font-size: 11px; }
+                    img { max-width: 100%; }
+                    span, div, p { font-size: inherit; }
+                  </style>
+                </head><body id="printable-area">${el.innerHTML}</body></html>`);
+                doc.close();
+
+                iframe.onload = () => {
+                  const ibody = iframe.contentDocument?.body;
+                  if (ibody) {
+                    // A4 content area in px at 96dpi: (297mm - 28mm margins) × 3.7795
+                    const a4px = (297 - 28) * 3.7795;
+                    const contentH = ibody.scrollHeight;
+                    if (contentH > 0) {
+                      // Scale to fill page exactly — no cap, always fills A4
+                      ibody.style.zoom = String(a4px / contentH);
+                    }
+                  }
+                  iframe.contentWindow?.print();
+                  setTimeout(() => document.body.removeChild(iframe), 500);
+                };
               }}>
                 <Printer size={16} /> Print / Save PDF
               </button>
