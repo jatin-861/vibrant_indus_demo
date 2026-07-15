@@ -1486,7 +1486,6 @@ export default function App() {
               cursor: 'pointer',
               padding: '6px',
               borderRadius: '6px',
-              display: 'none', // Overridden in CSS media queries to show on mobile
               alignItems: 'center',
               justifyContent: 'center',
               border: '1px solid var(--border-color)',
@@ -1700,7 +1699,6 @@ export default function App() {
                 color: 'var(--text-primary)',
                 cursor: 'pointer',
                 padding: '8px',
-                display: 'none', // Overridden in CSS media queries to show on mobile
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '8px',

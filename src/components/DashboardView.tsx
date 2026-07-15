@@ -282,7 +282,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* 4 Small Sub-Stat Cards */}
-      <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px', marginBottom: '16px' }}>
+      <div className="sub-metrics-grid" style={{ gap: '16px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px' }}>
           <div style={{ width: '36px', height: '36px', borderRadius: '8px', backgroundColor: '#3b82f6', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Home size={18} />
@@ -347,7 +347,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div className="card-body" style={{ padding: '8px 20px 4px' }}>
               {/* Consolidated single capsule bar chart matching Image 2 */}
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '14px', paddingTop: '24px', height: '180px' }}>
+              <div style={{ overflowX: 'auto', width: '100%', WebkitOverflowScrolling: 'touch', paddingBottom: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: '14px', paddingTop: '24px', height: '180px', minWidth: '460px' }}>
                 {monthlyTrend.map((m, i) => {
                   const TRACK_H = 160;
                   const MIN_H = 48; // minimum height for active bars to look chunky
@@ -450,6 +451,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                   );
                 })}
+                </div>
               </div>
 
               {/* Divider line */}
@@ -486,7 +488,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </div>
                 </div>
                 {/* Quick stats */}
-                <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div className="quick-stats-grid">
                   <div style={{ padding: '8px 10px', background: '#ecfdf5', borderRadius: '8px', border: '1px solid #a7f3d0' }}>
                     <div style={{ fontSize: '13px', fontWeight: '800', color: '#065f46' }}>{filteredInvoices.filter(i => i.status === 'paid').length}</div>
                     <div style={{ fontSize: '10px', color: '#047857', fontWeight: '600' }}>Paid Invoices</div>
