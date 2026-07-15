@@ -3,15 +3,15 @@ import type { Invoice, Payment, SystemSettings } from './types';
 export const INITIAL_SETTINGS: SystemSettings = {
   defaultMaintenance: 8400,
   transferFee: 2500,
-  upiId: 'fortunepark@upi',
+  upiId: 'vibrantpark@upi',
   qrImageUrl: '',
-  societyName: 'Fortune Industrial Park',
-  societyAddress: 'Plot No. 15-25, GIDC Industrial Estate, Vatva, Ahmedabad - 382445',
+  societyName: 'Vibrant Industrial Park',
+  societyAddress: 'Adinath Road, Odhav, Near GIDC, Ahmedabad - 382415',
   societyPhone: '9876000001',
-  societyBankDetails: 'HDFC Bank | A/C: 50100234567890 | IFSC: HDFC0001234 | Fortune Industrial Park',
+  societyBankDetails: 'HDFC Bank | A/C: 50100234567890 | IFSC: HDFC0001234 | Vibrant Industrial Park',
   invoiceTitle: 'Demand Invoice',
-  invoicePrefix: 'FIP-',
-  invoiceNotes: 'Cheques in favour of "Fortune Industrial Park". Queries: 9876000001.',
+  invoicePrefix: 'VIP-',
+  invoiceNotes: 'Cheques in favour of "Vibrant Industrial Park". Queries: 9876000001.',
   reminderDays: [3, 1],
   analyticsYear: 2026
 };

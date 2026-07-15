@@ -1,6 +1,6 @@
 # WhatsApp Integration (Meta Cloud API)
 
-Real WhatsApp sending/receiving for Fortune Industrial Park, replacing the simulated
+Real WhatsApp sending/receiving for Vibrant Industrial Park, replacing the simulated
 chat in `src/components/WhatsappSimulator.tsx`. Built across three places because of
 how this stack is split:
 

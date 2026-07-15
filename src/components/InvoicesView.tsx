@@ -1155,7 +1155,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       {settings.upiId ? (
                         <>
                           <img
-                            src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`upi://pay?pa=${settings.upiId}&pn=${settings.societyName || 'Fortune Industrial Park'}&am=${viewingInvoice.totalAmount}&cu=INR&tn=Invoice-${viewingInvoice.id}`)}`}
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(`upi://pay?pa=${settings.upiId}&pn=${settings.societyName || 'Vibrant Industrial Park'}&am=${viewingInvoice.totalAmount}&cu=INR&tn=Invoice-${viewingInvoice.id}`)}`}
                             alt="UPI Payment QR"
                             style={{ border: '1px solid #cbd5e1', padding: '4px', background: '#fff', borderRadius: '4px', width: '90px', height: '90px' }}
                           />

@@ -291,9 +291,9 @@ const INITIAL_SHADES: Shade[] = [
 // INITIAL_INVOICES, INITIAL_PAYMENTS, INITIAL_FINES, INITIAL_MESSAGES imported from demoData.ts
 
 const ADMINS: AdminRole[] = [
-  { id: 'ADM-1', name: 'jatin', role: 'Admin', email: 'amit@fortuneindustrialpark.com', avatar: 'AS' },
-  { id: 'ADM-2', name: 'saral', role: 'Treasurer', email: 'rajesh@fortuneindustrialpark.com', avatar: 'RP' },
-  { id: 'ADM-3', name: 'example', role: 'Secretary', email: 'vikram@fortuneindustrialpark.com', avatar: 'VS' }
+  { id: 'ADM-1', name: 'jatin', role: 'Admin', email: 'amit@vibrantindustrialpark.com', avatar: 'AS' },
+  { id: 'ADM-2', name: 'saral', role: 'Treasurer', email: 'rajesh@vibrantindustrialpark.com', avatar: 'RP' },
+  { id: 'ADM-3', name: 'example', role: 'Secretary', email: 'vikram@vibrantindustrialpark.com', avatar: 'VS' }
 ];
 
 // Toast Item with progress bar and close button
@@ -308,16 +308,18 @@ const ToastItem: React.FC<{
   onCloseRef.current = onClose;
 
   useEffect(() => {
-    // Timer runs for 3 seconds total. Decrease 1% every 30ms.
+    const startTime = Date.now();
+    const duration = 3000; // 3 seconds
+
     const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev <= 0) {
-          clearInterval(interval);
-          onCloseRef.current();
-          return 0;
-        }
-        return prev - 1;
-      });
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 100 - (elapsed / duration) * 100);
+      setProgress(remaining);
+
+      if (elapsed >= duration) {
+        clearInterval(interval);
+        onCloseRef.current();
+      }
     }, 30);
 
     return () => clearInterval(interval);
@@ -478,20 +480,21 @@ export default function App() {
         } else {
           // Fetch everything from Supabase with auto-migration for legacy entries
           let loadedSettings = mapSettingsFromDB(dbSettings[0]);
-          // Auto-fill default values only when settings are genuinely unconfigured
-          const needsDefaultFill = !loadedSettings.societyName || loadedSettings.defaultMaintenance === 0;
+          // Auto-fill default values or auto-migrate Fortune -> Vibrant
+          const isFortune = loadedSettings.societyName === 'Fortune Industrial Park';
+          const needsDefaultFill = !loadedSettings.societyName || loadedSettings.defaultMaintenance === 0 || isFortune;
           if (needsDefaultFill) {
             loadedSettings = {
               ...INITIAL_SETTINGS,
               // preserve any values the user already customised (non-empty overrides default)
-              societyName: loadedSettings.societyName || INITIAL_SETTINGS.societyName,
-              societyAddress: loadedSettings.societyAddress || INITIAL_SETTINGS.societyAddress,
+              societyName: isFortune ? INITIAL_SETTINGS.societyName : (loadedSettings.societyName || INITIAL_SETTINGS.societyName),
+              societyAddress: isFortune ? INITIAL_SETTINGS.societyAddress : (loadedSettings.societyAddress || INITIAL_SETTINGS.societyAddress),
               societyPhone: loadedSettings.societyPhone || INITIAL_SETTINGS.societyPhone,
-              societyBankDetails: loadedSettings.societyBankDetails || INITIAL_SETTINGS.societyBankDetails,
-              upiId: loadedSettings.upiId || INITIAL_SETTINGS.upiId,
+              societyBankDetails: isFortune ? INITIAL_SETTINGS.societyBankDetails : (loadedSettings.societyBankDetails || INITIAL_SETTINGS.societyBankDetails),
+              upiId: isFortune ? INITIAL_SETTINGS.upiId : (loadedSettings.upiId || INITIAL_SETTINGS.upiId),
               invoiceTitle: loadedSettings.invoiceTitle || INITIAL_SETTINGS.invoiceTitle,
-              invoicePrefix: loadedSettings.invoicePrefix || INITIAL_SETTINGS.invoicePrefix,
-              invoiceNotes: loadedSettings.invoiceNotes || INITIAL_SETTINGS.invoiceNotes,
+              invoicePrefix: isFortune ? INITIAL_SETTINGS.invoicePrefix : (loadedSettings.invoicePrefix || INITIAL_SETTINGS.invoicePrefix),
+              invoiceNotes: isFortune ? INITIAL_SETTINGS.invoiceNotes : (loadedSettings.invoiceNotes || INITIAL_SETTINGS.invoiceNotes),
               defaultMaintenance: loadedSettings.defaultMaintenance || INITIAL_SETTINGS.defaultMaintenance,
               transferFee: loadedSettings.transferFee || INITIAL_SETTINGS.transferFee,
             };
@@ -502,7 +505,7 @@ export default function App() {
             }
           }
           // Merge custom settings from localStorage if present
-          const localSettingsJson = localStorage.getItem('fortune_park_settings');
+          const localSettingsJson = localStorage.getItem('vibrant_park_settings');
           if (localSettingsJson) {
             try {
               const localSettings = JSON.parse(localSettingsJson);
@@ -1112,6 +1115,101 @@ export default function App() {
     }
   };
 
+  const handleUpdateAuditLog = async (updatedLog: AuditLog) => {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .update(mapAuditLogToDB(updatedLog))
+        .eq('id', updatedLog.id);
+      if (error) throw error;
+
+      setAuditLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
+      addToast(`Audit log entry ${updatedLog.id} updated.`, 'success');
+    } catch (err) {
+      addToast(`Error updating audit log: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
+  const handleDeleteAuditLog = async (logId: string) => {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .delete()
+        .eq('id', logId);
+      if (error) throw error;
+
+      setAuditLogs(prev => prev.filter(l => l.id !== logId));
+      addToast(`Audit log entry ${logId} deleted.`, 'info');
+    } catch (err) {
+      addToast(`Error deleting audit log: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
+  const handleBulkImportAuditLogs = async (importedLogs: AuditLog[]) => {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .upsert(importedLogs.map(mapAuditLogToDB));
+      if (error) throw error;
+
+      setAuditLogs(prev => {
+        const filtered = prev.filter(p => !importedLogs.some(f => f.id === p.id));
+        return [...filtered, ...importedLogs].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      });
+      addToast(`Successfully imported ${importedLogs.length} audit log entries.`, 'success');
+    } catch (err) {
+      addToast(`Error importing audit logs: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
+  const handleBulkImportPayments = async (newPaymentsData: Omit<Payment, 'id'>[]) => {
+    try {
+      const importedPayments: Payment[] = newPaymentsData.map((np, idx) => ({
+        id: `PAY-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+        ...np
+      }));
+
+      // Insert payments into Supabase
+      const { error } = await supabase.from('payments').insert(importedPayments.map(mapPaymentToDB));
+      if (error) throw error;
+
+      // Sync invoices linked to these payments
+      const linkedInvoiceIds = importedPayments
+        .map(p => p.invoiceId)
+        .filter((id): id is string => !!id);
+
+      if (linkedInvoiceIds.length > 0) {
+        const updatedInvoices = invoices.map(inv => {
+          if (linkedInvoiceIds.includes(inv.id) && inv.status !== 'paid') {
+            const matchedPayment = importedPayments.find(p => p.invoiceId === inv.id);
+            return {
+              ...inv,
+              status: 'paid' as const,
+              paymentMethod: matchedPayment ? (matchedPayment.method === 'UPI' ? 'online' as const : matchedPayment.method === 'Cash' ? 'cash' as const : matchedPayment.method === 'Cheque' ? 'cheque' as const : 'bank_transfer' as const) : null,
+              paymentDate: matchedPayment?.date || currentDate,
+              transactionDetails: matchedPayment?.reference || 'Excel Import'
+            };
+          }
+          return inv;
+        });
+
+        // Sync database for updated invoices
+        const dbInvoicesToUpdate = updatedInvoices.filter((inv, idx) => inv !== invoices[idx]);
+        await Promise.all(dbInvoicesToUpdate.map(inv => 
+          supabase.from('invoices').update(mapInvoiceToDB(inv)).eq('id', inv.id)
+        ));
+
+        setInvoices(updatedInvoices);
+      }
+
+      setPayments(prev => [...importedPayments, ...prev]);
+      addToast(`Successfully imported ${importedPayments.length} payment records.`, 'success');
+      addAuditLog('payment_marked', `Bulk Import`, `Imported ${importedPayments.length} payments`);
+    } catch (err) {
+      addToast(`Error importing payments: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
   // 10b. Update Invoice details
   const handleUpdateInvoice = async (oldId: string, updatedInvoice: Invoice) => {
     const total =
@@ -1242,8 +1340,8 @@ export default function App() {
               animation: 'pulseRing 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
             }} />
             <img
-              src="/fortune_favicon.avif"
-              alt="Fortune Industrial Park Logo"
+              src="/vibrant_favicon.avif"
+              alt="Vibrant Industrial Park Logo"
               style={{
                 width: '72px',
                 height: '72px',
@@ -1265,7 +1363,7 @@ export default function App() {
             WebkitTextFillColor: 'transparent',
             textAlign: 'center'
           }}>
-            Fortune Industrial Park
+            Vibrant Industrial Park
           </h2>
           <p style={{
             margin: '8px 0 0 0',
@@ -1375,7 +1473,7 @@ export default function App() {
               <LayoutDashboard size={20} />
             </div>
             <div className="brand-info">
-              <h2>Fortune Industrial Park</h2>
+              <h2>Vibrant Industrial Park</h2>
               <span>Billing & Payments Pro</span>
             </div>
           </div>
@@ -1627,7 +1725,7 @@ export default function App() {
               </h1>
               <p style={{ margin: 0 }}>
                 {activeTab === 'dashboard' && 'Property overview & KPIs'}
-                {activeTab === 'shades' && 'Manage Fortune Industrial Park units and shades'}
+                {activeTab === 'shades' && 'Manage Vibrant Industrial Park units and shades'}
                 {activeTab === 'owners' && 'Member registry, contact directory, and transfers'}
                 {activeTab === 'invoices' && 'Maintenance and utility billing records'}
                 {activeTab === 'payments' && 'Direct cash/cheque collected receipts'}
@@ -1756,6 +1854,7 @@ export default function App() {
               currentDate={currentDate}
               onRecordPayment={handleRecordPayment}
               onDeletePayment={handleDeletePayment}
+              onBulkImportPayments={handleBulkImportPayments}
             />
           )}
 
@@ -1799,7 +1898,7 @@ export default function App() {
                   }
 
                   // Write the custom settings to local storage as fallback
-                  localStorage.setItem('fortune_park_settings', JSON.stringify({
+                  localStorage.setItem('vibrant_park_settings', JSON.stringify({
                     invoiceTitle: us.invoiceTitle,
                     invoicePrefix: us.invoicePrefix,
                     invoiceNotes: us.invoiceNotes
@@ -1843,7 +1942,13 @@ export default function App() {
           )}
 
           {activeTab === 'auditlog' && (
-            <AuditLogView logs={auditLogs} />
+            <AuditLogView
+              logs={auditLogs}
+              onUpdateLog={handleUpdateAuditLog}
+              onDeleteLog={handleDeleteAuditLog}
+              onBulkImportLogs={handleBulkImportAuditLogs}
+              currentRole={currentAdmin.role}
+            />
           )}
 
 

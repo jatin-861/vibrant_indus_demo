@@ -68,7 +68,7 @@ export interface Payment {
 export interface SystemSettings {
   defaultMaintenance: number; // ₹720
   transferFee: number; // ₹2500
-  upiId: string; // e.g., "fortunecommunity@oksbi"
+  upiId: string; // e.g., "vibrantcommunity@oksbi"
   qrImageUrl: string; // Simulated QR image
   societyName: string;
   societyAddress: string;

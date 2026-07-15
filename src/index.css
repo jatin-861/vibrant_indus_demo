@@ -907,8 +907,18 @@ button, input, select, textarea {
   box-shadow: var(--shadow-premium);
   width: 100%;
   max-width: 550px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 40px);
   overflow: hidden;
   animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-content form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex-grow: 1;
 }
 
 .modal-content.large {
@@ -921,6 +931,7 @@ button, input, select, textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -954,8 +965,9 @@ button, input, select, textarea {
 
 .modal-body {
   padding: 24px;
-  max-height: 75vh;
   overflow-y: auto;
+  flex-grow: 1;
+  min-height: 0;
 }
 
 .modal-footer {
@@ -965,6 +977,7 @@ button, input, select, textarea {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 /* Forms styling */

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Plus, FileText, Download, Upload, Edit2, Trash2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import type { Payment, Invoice } from '../types';
 
 interface PaymentsViewProps {
@@ -8,6 +9,7 @@ interface PaymentsViewProps {
   currentDate: string;
   onRecordPayment: (payment: Omit<Payment, 'id'>) => void;
   onDeletePayment: (paymentId: string) => void;
+  onBulkImportPayments: (newPayments: Omit<Payment, 'id'>[]) => void;
 }
 
 export const PaymentsView: React.FC<PaymentsViewProps> = ({
@@ -15,7 +17,8 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   invoices,
   currentDate,
   onRecordPayment,
-  onDeletePayment
+  onDeletePayment,
+  onBulkImportPayments
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -81,6 +84,126 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
     setIsRecordModalOpen(false);
   };
 
+  const downloadSampleTemplate = () => {
+    const csvContent = "Date,Invoice ID,Tenant Name,Shade ID,Amount,Method,Reference\n" +
+      "2026-03-10,VIP-2026-0001,Ramesh Patel,SH-001,8400,UPI,UPI Ref 123456\n" +
+      "2026-03-11,,Sunita Sharma,SH-002,500,Cash,Office Collection";
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "payments_import_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToExcel = () => {
+    const data = filteredPayments.map(p => ({
+      'Date': p.date,
+      'Invoice ID': p.invoiceId || '—',
+      'Tenant Name': p.tenantName,
+      'Shade ID': p.shadeId,
+      'Amount (₹)': p.amount,
+      'Method': p.method,
+      'Reference': p.reference
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Payments');
+    XLSX.writeFile(wb, `payments_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+
+    const parseRows = (rows: string[][]): Omit<Payment, 'id'>[] => {
+      const newPayments: Omit<Payment, 'id'>[] = [];
+      
+      let startIdx = 1; // Assume first row is header
+      let dateIdx = 0;
+      let invIdx = 1;
+      let nameIdx = 2;
+      let shadeIdx = 3;
+      let amtIdx = 4;
+      let methodIdx = 5;
+      let refIdx = 6;
+
+      const headerRow = rows[0].map(c => String(c ?? '').trim().toLowerCase());
+      const hasHeader = headerRow.some(h => h.includes('date') || h.includes('invoice') || h.includes('tenant') || h.includes('shade') || h.includes('amount'));
+      if (!hasHeader) {
+        startIdx = 0;
+      } else {
+        headerRow.forEach((col, idx) => {
+          if (col.includes('date')) dateIdx = idx;
+          else if (col.includes('invoice')) invIdx = idx;
+          else if (col.includes('tenant') || col.includes('payer') || col.includes('name')) nameIdx = idx;
+          else if (col.includes('shade') || col.includes('unit')) shadeIdx = idx;
+          else if (col.includes('amount') || col.includes('collected')) amtIdx = idx;
+          else if (col.includes('method')) methodIdx = idx;
+          else if (col.includes('reference') || col.includes('ref') || col.includes('details')) refIdx = idx;
+        });
+      }
+
+      for (let i = startIdx; i < rows.length; i++) {
+        const cols = rows[i].map(c => String(c ?? '').trim());
+        if (cols.length < 4) continue;
+
+        const dateStr = cols[dateIdx] || new Date().toISOString().split('T')[0];
+        const rawMethod = cols[methodIdx] || 'Cash';
+        let cleanMethod: Payment['method'] = 'Cash';
+        if (/upi/i.test(rawMethod)) cleanMethod = 'UPI';
+        else if (/cheque/i.test(rawMethod)) cleanMethod = 'Cheque';
+        else if (/bank|transfer|neft|rtgs/i.test(rawMethod)) cleanMethod = 'Bank Transfer';
+
+        newPayments.push({
+          date: dateStr,
+          invoiceId: cols[invIdx] || null,
+          tenantName: cols[nameIdx] || 'Unassigned',
+          shadeId: cols[shadeIdx] || 'SH-000',
+          amount: parseFloat(cols[amtIdx].replace(/[^\d.]/g, '')) || 0,
+          method: cleanMethod,
+          reference: cols[refIdx] || 'Excel Import'
+        });
+      }
+      return newPayments;
+    };
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        let rows: string[][];
+        if (isXlsx) {
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
+          const wb = XLSX.read(data, { type: 'array' });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1 });
+        } else {
+          const text = event.target?.result as string;
+          rows = text.split('\n').filter(l => l.trim()).map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+        }
+        
+        const newPayments = parseRows(rows);
+        if (newPayments.length > 0) {
+          onBulkImportPayments(newPayments);
+        } else {
+          alert('No valid rows found. Ensure the file has data in columns: Date, Invoice ID, Tenant Name, Shade ID, Amount, Method, Reference.');
+        }
+      } catch (err) {
+        alert('Error parsing file. Please check formatting and try again.');
+      }
+    };
+
+    if (isXlsx) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
+    e.target.value = '';
+  };
+
   // Calculations for stats cards
   const totalCollected = payments.reduce((sum, p) => sum + p.amount, 0);
   const avgPayment = payments.length > 0 ? Math.round(totalCollected / payments.length) : 0;
@@ -113,10 +236,22 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
           </p>
         </div>
         
-        <div className="tools-actions">
-          <button className="btn btn-secondary btn-sm" title="Template helper"><FileText size={14} /> Template</button>
-          <button className="btn btn-secondary btn-sm"><Download size={14} /> Export</button>
-          <button className="btn btn-secondary btn-sm"><Upload size={14} /> Import</button>
+        <div className="tools-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <button className="btn btn-secondary btn-sm" title="Download sample import CSV template" onClick={downloadSampleTemplate}>
+            <FileText size={14} /> Template
+          </button>
+          <button className="btn btn-secondary btn-sm" title="Export payments to Excel" onClick={exportToExcel}>
+            <Download size={14} /> Export
+          </button>
+          <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }} title="Import payments from Excel/CSV">
+            <Upload size={14} /> Import
+            <input 
+              type="file" 
+              accept=".csv,.xlsx,.xls" 
+              style={{ display: 'none' }} 
+              onChange={handleImportFile} 
+            />
+          </label>
           <button className="btn btn-primary" onClick={() => setIsRecordModalOpen(true)}>
             <Plus size={16} /> Receipt Payment
           </button>

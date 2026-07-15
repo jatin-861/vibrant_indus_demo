@@ -158,7 +158,7 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
 
   const modal = (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-content" style={{ maxWidth: '680px', width: '95vw', maxHeight: '90vh', overflowY: 'auto' }}
+      <div className="modal-content" style={{ maxWidth: '680px', width: '95vw' }}
         onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

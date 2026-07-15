@@ -241,7 +241,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ invoices, payments: _p
   <div class="page">
     <div class="header">
       <div>
-        <div class="society-name">${settings?.societyName || 'Fortune Industrial Park'}</div>
+        <div class="society-name">${settings?.societyName || 'Vibrant Industrial Park'}</div>
         <div class="society-sub">Society Management System · Financial Report</div>
       </div>
       <div class="report-meta">
@@ -255,7 +255,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ invoices, payments: _p
       <tbody>${tableRows}</tbody>
     </table>
     <div class="footer">
-      <span>${settings?.societyName || 'Fortune Industrial Park'} · Society Management System</span>
+      <span>${settings?.societyName || 'Vibrant Industrial Park'} · Society Management System</span>
       <span>Report generated on ${today}</span>
     </div>
   </div>
