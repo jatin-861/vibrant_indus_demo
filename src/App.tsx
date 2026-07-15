@@ -591,6 +591,18 @@ export default function App() {
     loadData();
   }, []);
 
+  // Close mobile menu when window is resized to desktop size (fixes graying issue)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768 && isMobileMenuOpen) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [isMobileMenuOpen]);
+
   const handleCreateChangeRequest = async (
     type: 'edit_shade' | 'update_settings' | 'reset_db',
     details: string,
