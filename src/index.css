@@ -2473,5 +2473,125 @@ button, input, select, textarea {
   }
 }
 
+/* Mobile Sidebar Backdrop */
+.sidebar-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  z-index: 99;
+}
+
+/* Mobile responsiveness styles */
+@media (max-width: 768px) {
+  /* Layout modifications */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: -280px;
+    bottom: 0;
+    width: 280px;
+    height: 100vh;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
+    transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .sidebar.open {
+    left: 0;
+  }
+  
+  .mobile-menu-toggle {
+    display: flex !important;
+  }
+  
+  .sidebar-close-btn {
+    display: flex !important;
+  }
+  
+  .main-header {
+    padding: 0 16px;
+    height: 70px;
+  }
+  
+  .view-canvas {
+    padding: 16px;
+  }
+
+  /* Grid layouts */
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .shade-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    padding: 10px;
+  }
+  
+  .modal-content {
+    max-height: calc(100vh - 20px);
+  }
+  
+  .modal-body {
+    padding: 16px;
+  }
+  
+  .modal-footer {
+    padding: 12px 16px;
+  }
+
+  /* Hide non-critical columns on mobile tables to improve layout, making tables responsive */
+  .custom-table th:nth-child(4), 
+  .custom-table td:nth-child(4),
+  .custom-table th:nth-child(6), 
+  .custom-table td:nth-child(6),
+  .custom-table th:nth-child(7), 
+  .custom-table td:nth-child(7) {
+    display: none;
+  }
+
+  /* Toolbar buttons wrap */
+  .tools-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .tools-actions {
+    justify-content: stretch;
+    width: 100%;
+  }
+
+  .tools-actions button,
+  .tools-actions label {
+    flex-grow: 1;
+    justify-content: center;
+  }
+  
+  .search-input-wrapper {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  /* Dashboard layout two columns */
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
 
 
