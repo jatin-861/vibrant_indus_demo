@@ -1,36 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Grid,
   Users,
   FileText,
-  MessageSquare,
   Settings as SettingsIcon,
   Bell,
   CheckCircle,
   AlertCircle,
   LayoutDashboard,
   DollarSign,
-  AlertTriangle,
-  Mail,
   ShieldAlert,
   Menu,
   ArrowLeft,
   BarChart2,
   ClipboardList
 } from 'lucide-react';
-import type { Shade, Owner, Invoice, WhatsAppMessage, SystemSettings, AdminRole, Payment, FineRecord, ChangeRequest, AuditLog } from './types';
+import type { Shade, Owner, Invoice, SystemSettings, AdminRole, Payment, ChangeRequest, AuditLog } from './types';
 import { DashboardView } from './components/DashboardView';
 import { ShadesView } from './components/ShadesView';
 import { OwnersView } from './components/OwnersView';
 import { InvoicesView } from './components/InvoicesView';
 import { PaymentsView } from './components/PaymentsView';
-import { FinesView } from './components/FinesView';
-import { WhatsappSimulator } from './components/WhatsappSimulator';
 import { SettingsView } from './components/SettingsView';
 import { AdminRequestsView } from './components/AdminRequestsView';
 import { ReportsView } from './components/ReportsView';
 import { AuditLogView } from './components/AuditLogView';
 import { supabase } from './supabaseClient';
+import { INITIAL_SETTINGS, INITIAL_INVOICES, INITIAL_PAYMENTS } from './demoData';
 
 // Helper Mapping Functions between Supabase snake_case tables and frontend models
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,11 +62,8 @@ const mapShadeFromDB = (db: any): Shade => ({
   ownerId: db.owner_id,
   renterId: db.renter_id,
   fixedMaintenance: db.fixed_maintenance,
-  lastWaterReading: db.last_water_reading,
-  currentWaterReading: db.current_water_reading,
   transferFeeTriggered: db.transfer_fee_triggered,
-  hasWaterSupply: db.has_water_supply,
-  penaltyDisabled: db.penalty_disabled || false
+  documents: db.documents ? (typeof db.documents === 'string' ? JSON.parse(db.documents) : db.documents) : []
 });
 
 const mapShadeToDB = (s: Shade) => ({
@@ -82,11 +75,8 @@ const mapShadeToDB = (s: Shade) => ({
   owner_id: s.ownerId,
   renter_id: s.renterId,
   fixed_maintenance: s.fixedMaintenance,
-  last_water_reading: s.lastWaterReading,
-  current_water_reading: s.currentWaterReading,
   transfer_fee_triggered: s.transferFeeTriggered,
-  has_water_supply: s.hasWaterSupply !== false,
-  penalty_disabled: s.penaltyDisabled || false
+  documents: JSON.stringify(s.documents || [])
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,13 +91,9 @@ const mapInvoiceFromDB = (db: any): Invoice => ({
   renterPhone: db.renter_phone,
   maintenanceFee: db.maintenance_fee,
   billingMonths: db.billing_months,
-  oldWaterReading: db.old_water_reading,
-  newWaterReading: db.new_water_reading,
-  waterUsageCharge: db.water_usage_charge,
   otherMaintenanceName: db.other_maintenance_name,
   otherMaintenanceCharge: db.other_maintenance_charge,
   transferFee: db.transfer_fee,
-  fineAmount: db.fine_amount,
   totalAmount: db.total_amount,
   generatedDate: db.generated_date,
   dueDate: db.due_date,
@@ -128,13 +114,9 @@ const mapInvoiceToDB = (i: Invoice) => ({
   renter_phone: i.renterPhone,
   maintenance_fee: i.maintenanceFee,
   billing_months: i.billingMonths,
-  old_water_reading: i.oldWaterReading,
-  new_water_reading: i.newWaterReading,
-  water_usage_charge: i.waterUsageCharge,
   other_maintenance_name: i.otherMaintenanceName || null,
   other_maintenance_charge: i.otherMaintenanceCharge,
   transfer_fee: i.transferFee,
-  fine_amount: i.fineAmount,
   total_amount: i.totalAmount,
   generated_date: i.generatedDate,
   due_date: i.dueDate,
@@ -167,57 +149,11 @@ const mapPaymentToDB = (p: Payment) => ({
   reference: p.reference || null
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mapFineFromDB = (db: any): FineRecord => ({
-  id: db.id,
-  shadeId: db.shade_id,
-  invoiceId: db.invoice_id,
-  ownerName: db.owner_name,
-  amount: db.amount,
-  reason: db.reason,
-  date: db.date,
-  status: db.status
-});
-
-const mapFineToDB = (f: FineRecord) => ({
-  id: f.id,
-  shade_id: f.shadeId,
-  invoice_id: f.invoiceId,
-  owner_name: f.ownerName,
-  amount: f.amount,
-  reason: f.reason,
-  date: f.date,
-  status: f.status
-});
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mapMessageFromDB = (db: any): WhatsAppMessage => ({
-  id: db.id,
-  phone: db.phone,
-  timestamp: db.timestamp,
-  messageType: db.message_type,
-  content: db.content,
-  sent: db.sent,
-  invoiceId: db.invoice_id
-});
-
-const mapMessageToDB = (m: WhatsAppMessage) => ({
-  id: m.id,
-  phone: m.phone,
-  timestamp: m.timestamp,
-  message_type: m.messageType,
-  content: m.content,
-  sent: m.sent,
-  invoice_id: m.invoiceId
-});
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const mapSettingsFromDB = (db: any): SystemSettings => ({
   defaultMaintenance: db.default_maintenance,
-  waterRate: db.water_rate,
   transferFee: db.transfer_fee,
-  gracePeriodDays: db.grace_period_days,
-  finePerDay: db.fine_per_day,
   upiId: db.upi_id,
   qrImageUrl: db.qr_image_url,
   societyName: db.society_name,
@@ -227,16 +163,14 @@ const mapSettingsFromDB = (db: any): SystemSettings => ({
   invoiceTitle: db.invoice_title || '',
   invoicePrefix: db.invoice_prefix || 'INV-',
   invoiceNotes: db.invoice_notes || '',
-  reminderDays: db.reminder_days || [3, 1]
+  reminderDays: db.reminder_days || [3, 1],
+  analyticsYear: db.analytics_year || new Date().getFullYear()
 });
 
 const mapSettingsToDB = (s: SystemSettings) => ({
   id: 1,
   default_maintenance: s.defaultMaintenance,
-  water_rate: s.waterRate,
   transfer_fee: s.transferFee,
-  grace_period_days: s.gracePeriodDays,
-  fine_per_day: s.finePerDay,
   upi_id: s.upiId,
   qr_image_url: s.qrImageUrl,
   society_name: s.societyName,
@@ -246,7 +180,8 @@ const mapSettingsToDB = (s: SystemSettings) => ({
   invoice_title: s.invoiceTitle,
   invoice_prefix: s.invoicePrefix,
   invoice_notes: s.invoiceNotes,
-  reminder_days: s.reminderDays || [3, 1]
+  reminder_days: s.reminderDays || [3, 1],
+  analytics_year: s.analyticsYear || new Date().getFullYear()
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -274,25 +209,29 @@ const mapRequestToDB = (r: ChangeRequest) => ({
   date: r.date
 });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mapAuditLogFromDB = (db: any): AuditLog => ({
+  id: db.id,
+  action: db.action,
+  entity: db.entity,
+  performedBy: db.performed_by,
+  role: db.role,
+  timestamp: db.timestamp,
+  details: db.details || undefined
+});
+
+const mapAuditLogToDB = (l: AuditLog) => ({
+  id: l.id,
+  action: l.action,
+  entity: l.entity,
+  performed_by: l.performedBy,
+  role: l.role,
+  timestamp: l.timestamp,
+  details: l.details || null
+});
 
 // Initial Mock Data (aligned with screenshots)
-const INITIAL_SETTINGS: SystemSettings = {
-  defaultMaintenance: 0,
-  waterRate: 0,
-  transferFee: 0,
-  gracePeriodDays: 0,
-  finePerDay: 0,
-  upiId: '',
-  qrImageUrl: '',
-  societyName: '',
-  societyAddress: '',
-  societyPhone: '',
-  societyBankDetails: '',
-  invoiceTitle: '',
-  invoicePrefix: '',
-  invoiceNotes: '',
-  reminderDays: [3, 1]
-};
+// Settings and seed data are imported from demoData.ts
 
 const INITIAL_OWNERS: Owner[] = [
   { id: 'OWN-001', name: 'Ramesh Patel', phone: '9876543210', email: 'ramesh.patel@gmail.com', address: '12, Sardar Nagar, Ahmedabad', type: 'owner', status: 'active', companyName: 'Patel Metals Pvt. Ltd.' },
@@ -323,40 +262,38 @@ const INITIAL_OWNERS: Owner[] = [
 ];
 
 const INITIAL_SHADES: Shade[] = [
-  { id: 'SH-001', block: 'Block A', floor: 'Ground Floor', sqFt: 1200, status: 'occupied', ownerId: 'OWN-001', renterId: 'REN-001', fixedMaintenance: 1400, lastWaterReading: 1250, currentWaterReading: 1250, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-002', block: 'Block A', floor: 'Ground Floor', sqFt: 1500, status: 'occupied', ownerId: 'OWN-002', renterId: null, fixedMaintenance: 1400, lastWaterReading: 980, currentWaterReading: 980, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-003', block: 'Block A', floor: 'Ground Floor', sqFt: 1800, status: 'occupied', ownerId: 'OWN-003', renterId: 'REN-002', fixedMaintenance: 1400, lastWaterReading: 2100, currentWaterReading: 2100, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-004', block: 'Block A', floor: 'Ground Floor', sqFt: 1200, status: 'vacant', ownerId: 'OWN-004', renterId: null, fixedMaintenance: 1400, lastWaterReading: 450, currentWaterReading: 450, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-005', block: 'Block A', floor: 'First Floor', sqFt: 1000, status: 'occupied', ownerId: 'OWN-005', renterId: 'REN-003', fixedMaintenance: 1400, lastWaterReading: 760, currentWaterReading: 760, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-006', block: 'Block A', floor: 'First Floor', sqFt: 1400, status: 'occupied', ownerId: 'OWN-006', renterId: null, fixedMaintenance: 1400, lastWaterReading: 1340, currentWaterReading: 1340, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-007', block: 'Block A', floor: 'First Floor', sqFt: 900, status: 'maintenance', ownerId: 'OWN-007', renterId: null, fixedMaintenance: 1400, lastWaterReading: 620, currentWaterReading: 620, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: true },
-  { id: 'SH-008', block: 'Block B', floor: 'Ground Floor', sqFt: 2000, status: 'occupied', ownerId: 'OWN-008', renterId: 'REN-004', fixedMaintenance: 1400, lastWaterReading: 3200, currentWaterReading: 3200, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-009', block: 'Block B', floor: 'Ground Floor', sqFt: 1600, status: 'occupied', ownerId: 'OWN-009', renterId: null, fixedMaintenance: 1400, lastWaterReading: 1870, currentWaterReading: 1870, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-010', block: 'Block B', floor: 'Ground Floor', sqFt: 1200, status: 'occupied', ownerId: 'OWN-010', renterId: 'REN-005', fixedMaintenance: 1400, lastWaterReading: 940, currentWaterReading: 940, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-011', block: 'Block B', floor: 'Ground Floor', sqFt: 1800, status: 'vacant', ownerId: 'OWN-011', renterId: null, fixedMaintenance: 1400, lastWaterReading: 310, currentWaterReading: 310, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-012', block: 'Block B', floor: 'First Floor', sqFt: 1100, status: 'occupied', ownerId: 'OWN-012', renterId: 'REN-006', fixedMaintenance: 1400, lastWaterReading: 1560, currentWaterReading: 1560, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-013', block: 'Block B', floor: 'First Floor', sqFt: 1300, status: 'occupied', ownerId: 'OWN-013', renterId: null, fixedMaintenance: 1400, lastWaterReading: 820, currentWaterReading: 820, transferFeeTriggered: false, hasWaterSupply: false, penaltyDisabled: false },
-  { id: 'SH-014', block: 'Block B', floor: 'First Floor', sqFt: 1700, status: 'occupied', ownerId: 'OWN-014', renterId: 'REN-007', fixedMaintenance: 1400, lastWaterReading: 2450, currentWaterReading: 2450, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-015', block: 'Block B', floor: 'First Floor', sqFt: 950, status: 'maintenance', ownerId: 'OWN-015', renterId: null, fixedMaintenance: 1400, lastWaterReading: 490, currentWaterReading: 490, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: true },
-  { id: 'SH-016', block: 'Block C', floor: 'Ground Floor', sqFt: 2200, status: 'occupied', ownerId: 'OWN-001', renterId: 'REN-008', fixedMaintenance: 1400, lastWaterReading: 4100, currentWaterReading: 4100, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-017', block: 'Block C', floor: 'Ground Floor', sqFt: 1500, status: 'occupied', ownerId: 'OWN-002', renterId: null, fixedMaintenance: 1400, lastWaterReading: 1680, currentWaterReading: 1680, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-018', block: 'Block C', floor: 'Ground Floor', sqFt: 1100, status: 'occupied', ownerId: 'OWN-003', renterId: 'REN-009', fixedMaintenance: 1400, lastWaterReading: 730, currentWaterReading: 730, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-019', block: 'Block C', floor: 'Ground Floor', sqFt: 1900, status: 'vacant', ownerId: 'OWN-004', renterId: null, fixedMaintenance: 1400, lastWaterReading: 220, currentWaterReading: 220, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-020', block: 'Block C', floor: 'First Floor', sqFt: 1350, status: 'occupied', ownerId: 'OWN-005', renterId: 'REN-010', fixedMaintenance: 1400, lastWaterReading: 1150, currentWaterReading: 1150, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-021', block: 'Block C', floor: 'First Floor', sqFt: 1250, status: 'occupied', ownerId: 'OWN-006', renterId: null, fixedMaintenance: 1400, lastWaterReading: 890, currentWaterReading: 890, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-022', block: 'Block C', floor: 'First Floor', sqFt: 1600, status: 'occupied', ownerId: 'OWN-007', renterId: null, fixedMaintenance: 1400, lastWaterReading: 2020, currentWaterReading: 2020, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-023', block: 'Block D', floor: 'Ground Floor', sqFt: 1800, status: 'occupied', ownerId: 'OWN-008', renterId: null, fixedMaintenance: 1400, lastWaterReading: 2780, currentWaterReading: 2780, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-024', block: 'Block D', floor: 'Ground Floor', sqFt: 1400, status: 'vacant', ownerId: 'OWN-009', renterId: null, fixedMaintenance: 1400, lastWaterReading: 570, currentWaterReading: 570, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
-  { id: 'SH-025', block: 'Block D', floor: 'Ground Floor', sqFt: 2100, status: 'occupied', ownerId: 'OWN-010', renterId: null, fixedMaintenance: 1400, lastWaterReading: 3650, currentWaterReading: 3650, transferFeeTriggered: false, hasWaterSupply: true, penaltyDisabled: false },
+  { id: 'SH-001', block: 'Block A', floor: 'Ground Floor', sqFt: 1200, status: 'occupied', ownerId: 'OWN-001', renterId: 'REN-001', fixedMaintenance: 8400, transferFeeTriggered: false, documents: [{ id: 'DOC-SH001-1', name: 'Ownership Agreement.pdf', type: 'application/pdf', dataUrl: '/demo-document.pdf', uploadedDate: '2026-01-05' }] },
+  { id: 'SH-002', block: 'Block A', floor: 'Ground Floor', sqFt: 1500, status: 'occupied', ownerId: 'OWN-002', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false, documents: [{ id: 'DOC-SH002-1', name: 'Lease Agreement.pdf', type: 'application/pdf', dataUrl: '/demo-document.pdf', uploadedDate: '2026-01-10' }] },
+  { id: 'SH-003', block: 'Block A', floor: 'Ground Floor', sqFt: 1800, status: 'occupied', ownerId: 'OWN-003', renterId: 'REN-002', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-004', block: 'Block A', floor: 'Ground Floor', sqFt: 1200, status: 'vacant', ownerId: 'OWN-004', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-005', block: 'Block A', floor: 'First Floor', sqFt: 1000, status: 'occupied', ownerId: 'OWN-005', renterId: 'REN-003', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-006', block: 'Block A', floor: 'First Floor', sqFt: 1400, status: 'occupied', ownerId: 'OWN-006', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-007', block: 'Block A', floor: 'First Floor', sqFt: 900, status: 'maintenance', ownerId: 'OWN-007', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-008', block: 'Block B', floor: 'Ground Floor', sqFt: 2000, status: 'occupied', ownerId: 'OWN-008', renterId: 'REN-004', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-009', block: 'Block B', floor: 'Ground Floor', sqFt: 1600, status: 'occupied', ownerId: 'OWN-009', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-010', block: 'Block B', floor: 'Ground Floor', sqFt: 1200, status: 'occupied', ownerId: 'OWN-010', renterId: 'REN-005', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-011', block: 'Block B', floor: 'Ground Floor', sqFt: 1800, status: 'vacant', ownerId: 'OWN-011', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-012', block: 'Block B', floor: 'First Floor', sqFt: 1100, status: 'occupied', ownerId: 'OWN-012', renterId: 'REN-006', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-013', block: 'Block B', floor: 'First Floor', sqFt: 1300, status: 'occupied', ownerId: 'OWN-013', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-014', block: 'Block B', floor: 'First Floor', sqFt: 1700, status: 'occupied', ownerId: 'OWN-014', renterId: 'REN-007', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-015', block: 'Block B', floor: 'First Floor', sqFt: 950, status: 'maintenance', ownerId: 'OWN-015', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-016', block: 'Block C', floor: 'Ground Floor', sqFt: 2200, status: 'occupied', ownerId: 'OWN-001', renterId: 'REN-008', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-017', block: 'Block C', floor: 'Ground Floor', sqFt: 1500, status: 'occupied', ownerId: 'OWN-002', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-018', block: 'Block C', floor: 'Ground Floor', sqFt: 1100, status: 'occupied', ownerId: 'OWN-003', renterId: 'REN-009', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-019', block: 'Block C', floor: 'Ground Floor', sqFt: 1900, status: 'vacant', ownerId: 'OWN-004', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-020', block: 'Block C', floor: 'First Floor', sqFt: 1350, status: 'occupied', ownerId: 'OWN-005', renterId: 'REN-010', fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-021', block: 'Block C', floor: 'First Floor', sqFt: 1250, status: 'occupied', ownerId: 'OWN-006', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-022', block: 'Block C', floor: 'First Floor', sqFt: 1600, status: 'occupied', ownerId: 'OWN-007', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-023', block: 'Block D', floor: 'Ground Floor', sqFt: 1800, status: 'occupied', ownerId: 'OWN-008', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-024', block: 'Block D', floor: 'Ground Floor', sqFt: 1400, status: 'vacant', ownerId: 'OWN-009', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
+  { id: 'SH-025', block: 'Block D', floor: 'Ground Floor', sqFt: 2100, status: 'occupied', ownerId: 'OWN-010', renterId: null, fixedMaintenance: 8400, transferFeeTriggered: false },
 ];
-const INITIAL_INVOICES: Invoice[] = [];
-const INITIAL_PAYMENTS: Payment[] = [];
-const INITIAL_MESSAGES: WhatsAppMessage[] = [];
+// INITIAL_INVOICES, INITIAL_PAYMENTS, INITIAL_FINES, INITIAL_MESSAGES imported from demoData.ts
 
 const ADMINS: AdminRole[] = [
-  { id: 'ADM-1', name: 'jatin', role: 'Admin', email: 'amit@fortuneindustrialpark.com', avatar: 'AS' },
-  { id: 'ADM-2', name: 'saral', role: 'Treasurer', email: 'rajesh@fortuneindustrialpark.com', avatar: 'RP' },
-  { id: 'ADM-3', name: 'example', role: 'Secretary', email: 'vikram@fortuneindustrialpark.com', avatar: 'VS' }
+  { id: 'ADM-1', name: 'jatin', role: 'Admin', email: 'amit@vibrantindustrialpark.com', avatar: 'AS' },
+  { id: 'ADM-2', name: 'saral', role: 'Treasurer', email: 'rajesh@vibrantindustrialpark.com', avatar: 'RP' },
+  { id: 'ADM-3', name: 'example', role: 'Secretary', email: 'vikram@vibrantindustrialpark.com', avatar: 'VS' }
 ];
 
 // Toast Item with progress bar and close button
@@ -367,22 +304,26 @@ const ToastItem: React.FC<{
   onClose: () => void;
 }> = ({ type, text, onClose }) => {
   const [progress, setProgress] = useState(100);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
-    // Timer runs for 3 seconds total. Decrease 1% every 30ms.
+    const startTime = Date.now();
+    const duration = 3000; // 3 seconds
+
     const interval = setInterval(() => {
-      setProgress(prev => {
-        if (prev <= 0) {
-          clearInterval(interval);
-          onClose();
-          return 0;
-        }
-        return prev - 1;
-      });
+      const elapsed = Date.now() - startTime;
+      const remaining = Math.max(0, 100 - (elapsed / duration) * 100);
+      setProgress(remaining);
+
+      if (elapsed >= duration) {
+        clearInterval(interval);
+        onCloseRef.current();
+      }
     }, 30);
 
     return () => clearInterval(interval);
-  }, [onClose]);
+  }, []); // empty deps — timer starts once and uses ref for latest onClose
 
   return (
     <div className={`toast ${type}`} style={{ position: 'relative', overflow: 'hidden', paddingBottom: '16px', display: 'flex', flexDirection: 'column' }}>
@@ -431,21 +372,19 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [shades, setShades] = useState<Shade[]>(INITIAL_SHADES);
   const [owners, setOwners] = useState<Owner[]>(INITIAL_OWNERS);
-  const [invoices, setInvoices] = useState<Invoice[]>(INITIAL_INVOICES);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const invoiceCountRef = useRef(0);
   const [payments, setPayments] = useState<Payment[]>(INITIAL_PAYMENTS);
-  const [fines, setFines] = useState<FineRecord[]>([]);
-  const [messages, setMessages] = useState<WhatsAppMessage[]>(INITIAL_MESSAGES);
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
 
   // Mobile drawer state
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [selectedSimShadeId, setSelectedSimShadeId] = useState('');
 
   // Direct Billing from Shade link state
   const [preselectedShadeId, setPreselectedShadeId] = useState<string | null>(null);
 
-  // Simulation Date state
-  const [currentDate, setCurrentDate] = useState<string>('2026-05-16');
+  // Simulation Date state — aligned with demo data (Jan/Feb/Mar 2026 billing cycle)
+  const [currentDate, setCurrentDate] = useState<string>('2026-03-10');
 
   // Transfer Trigger Shade Link
   const [transferShadeId, setTransferShadeId] = useState<string | null>(null);
@@ -485,6 +424,9 @@ export default function App() {
       details
     };
     setAuditLogs(prev => [log, ...prev]);
+    supabase.from('audit_logs').insert([mapAuditLogToDB(log)]).then(({ error }) => {
+      if (error) console.warn('Failed to persist audit log (run migrate_add_missing_columns.sql to create the audit_logs table):', error.message);
+    });
   };
 
   useEffect(() => {
@@ -519,51 +461,51 @@ export default function App() {
             }
           }
 
-          // Seed shades (fallback without penalty_disabled if column doesn't exist yet)
+          // Seed shades (fallback without documents if columns don't exist yet)
           {
             const { error: shadeErr } = await supabase.from('shades').insert(INITIAL_SHADES.map(mapShadeToDB));
             if (shadeErr) {
-              await supabase.from('shades').insert(INITIAL_SHADES.map(s => { const { penalty_disabled: _pd, ...base } = mapShadeToDB(s); return base; }));
+              await supabase.from('shades').insert(INITIAL_SHADES.map(s => { const { documents: _docs, ...base } = mapShadeToDB(s); return base; }));
             }
           }
 
-          // Seed invoices
-          await supabase.from('invoices').insert(INITIAL_INVOICES.map(mapInvoiceToDB));
-
-          // Seed payments
-          await supabase.from('payments').insert(INITIAL_PAYMENTS.map(mapPaymentToDB));
-
-          // Seed messages
-          await supabase.from('whatsapp_messages').insert(INITIAL_MESSAGES.map(mapMessageToDB));
-
-          // Refresh states
+          // Refresh states (no demo invoice seeding — start clean)
           setSettings(INITIAL_SETTINGS);
           setOwners(INITIAL_OWNERS);
           setShades(INITIAL_SHADES);
-          setInvoices(INITIAL_INVOICES);
-          setPayments(INITIAL_PAYMENTS);
-          setMessages(INITIAL_MESSAGES);
-          setFines([]);
+          setInvoices([]);
+          setPayments([]);
           setChangeRequests([]);
+          invoiceCountRef.current = 0;
         } else {
           // Fetch everything from Supabase with auto-migration for legacy entries
           let loadedSettings = mapSettingsFromDB(dbSettings[0]);
-          if (loadedSettings.societyName.includes('Shade') || loadedSettings.societyName.includes('Society') || loadedSettings.societyName.includes('Ledger')) {
+          // Auto-fill default values or auto-migrate Fortune -> Vibrant
+          const isFortune = loadedSettings.societyName === 'Fortune Industrial Park';
+          const needsDefaultFill = !loadedSettings.societyName || loadedSettings.defaultMaintenance === 0 || isFortune;
+          if (needsDefaultFill) {
             loadedSettings = {
-              ...loadedSettings,
-              societyName: 'Fortune Industrial Park',
-              societyAddress: '',
-              upiId: '',
-              qrImageUrl: ''
+              ...INITIAL_SETTINGS,
+              // preserve any values the user already customised (non-empty overrides default)
+              societyName: isFortune ? INITIAL_SETTINGS.societyName : (loadedSettings.societyName || INITIAL_SETTINGS.societyName),
+              societyAddress: isFortune ? INITIAL_SETTINGS.societyAddress : (loadedSettings.societyAddress || INITIAL_SETTINGS.societyAddress),
+              societyPhone: loadedSettings.societyPhone || INITIAL_SETTINGS.societyPhone,
+              societyBankDetails: isFortune ? INITIAL_SETTINGS.societyBankDetails : (loadedSettings.societyBankDetails || INITIAL_SETTINGS.societyBankDetails),
+              upiId: isFortune ? INITIAL_SETTINGS.upiId : (loadedSettings.upiId || INITIAL_SETTINGS.upiId),
+              invoiceTitle: loadedSettings.invoiceTitle || INITIAL_SETTINGS.invoiceTitle,
+              invoicePrefix: isFortune ? INITIAL_SETTINGS.invoicePrefix : (loadedSettings.invoicePrefix || INITIAL_SETTINGS.invoicePrefix),
+              invoiceNotes: isFortune ? INITIAL_SETTINGS.invoiceNotes : (loadedSettings.invoiceNotes || INITIAL_SETTINGS.invoiceNotes),
+              defaultMaintenance: loadedSettings.defaultMaintenance || INITIAL_SETTINGS.defaultMaintenance,
+              transferFee: loadedSettings.transferFee || INITIAL_SETTINGS.transferFee,
             };
             try {
               await supabase.from('system_settings').update(mapSettingsToDB(loadedSettings)).eq('id', 1);
             } catch (err) {
-              console.warn('Update failed, probably missing columns. Using localStorage fallback.', err);
+              console.warn('Settings update failed, using merged defaults.', err);
             }
           }
           // Merge custom settings from localStorage if present
-          const localSettingsJson = localStorage.getItem('fortune_park_settings');
+          const localSettingsJson = localStorage.getItem('vibrant_park_settings');
           if (localSettingsJson) {
             try {
               const localSettings = JSON.parse(localSettingsJson);
@@ -579,40 +521,63 @@ export default function App() {
           }
           setSettings(loadedSettings);
 
-          const { data: dbOwners } = await supabase.from('owners').select('*');
-          if (dbOwners) setOwners(dbOwners.map(mapOwnerFromDB));
+          const [
+            resOwners,
+            resShades,
+            resInvoices,
+            resPayments,
+            resRequests,
+            resAuditLogs
+          ] = await Promise.all([
+            supabase.from('owners').select('*'),
+            supabase.from('shades').select('*'),
+            supabase.from('invoices').select('*'),
+            supabase.from('payments').select('*'),
+            supabase.from('change_requests').select('*'),
+            supabase.from('audit_logs').select('*').order('timestamp', { ascending: false })
+          ]);
 
-          const { data: dbShades } = await supabase.from('shades').select('*');
+          const dbOwners = resOwners.data;
+          const dbShades = resShades.data;
+          const dbInvoices = resInvoices.data;
+          const dbPayments = resPayments.data;
+          const dbRequests = resRequests.data;
+          const dbAuditLogs = resAuditLogs.data;
+
+          if (dbOwners) setOwners(dbOwners.map(mapOwnerFromDB));
+          if (dbPayments) setPayments(dbPayments.map(mapPaymentFromDB));
+          if (dbAuditLogs) setAuditLogs(dbAuditLogs.map(mapAuditLogFromDB));
+          else if (resAuditLogs.error) console.warn('audit_logs table not found yet — run migrate_add_missing_columns.sql to enable persistent audit history:', resAuditLogs.error.message);
+
           if (dbShades) {
-            let mappedShades = dbShades.map(mapShadeFromDB);
-            let needsShadeWaterUpdate = false;
-            const updatedMappedShades = mappedShades.map(s => {
-              if (s.hasWaterSupply === false) {
-                needsShadeWaterUpdate = true;
-                return { ...s, hasWaterSupply: true };
-              }
-              return s;
-            });
-            if (needsShadeWaterUpdate) {
-              await supabase.from('shades').update({ has_water_supply: true }).neq('id', 'dummy');
-              mappedShades = updatedMappedShades;
-            }
+            const mappedShades = dbShades.map(mapShadeFromDB);
             setShades(mappedShades);
           }
 
-          const { data: dbInvoices } = await supabase.from('invoices').select('*');
-          if (dbInvoices) setInvoices(dbInvoices.map(mapInvoiceFromDB));
+          if (dbInvoices) {
+            // Remove any demo invoices (FIP- prefix) that were auto-seeded previously
+            const demoIds = dbInvoices
+              .filter((inv: any) => typeof inv.id === 'string' && inv.id.startsWith('FIP-'))
+              .map((inv: any) => inv.id as string);
 
-          const { data: dbPayments } = await supabase.from('payments').select('*');
-          if (dbPayments) setPayments(dbPayments.map(mapPaymentFromDB));
+            if (demoIds.length > 0) {
+              await supabase.from('invoices').delete().in('id', demoIds);
+              // Also remove payments that referenced those invoices
+              await supabase.from('payments').delete().in('invoice_id', demoIds);
+              addToast(`Removed ${demoIds.length} demo invoices. Only real data shown now.`, 'info');
+            }
 
-          const { data: dbFines } = await supabase.from('fines').select('*');
-          if (dbFines) setFines(dbFines.map(mapFineFromDB));
+            // Re-fetch everything after cleanup so state is accurate
+            const [cleanInv, cleanPay] = await Promise.all([
+              supabase.from('invoices').select('*'),
+              supabase.from('payments').select('*')
+            ]);
 
-          const { data: dbMessages } = await supabase.from('whatsapp_messages').select('*');
-          if (dbMessages) setMessages(dbMessages.map(mapMessageFromDB));
-
-          const { data: dbRequests } = await supabase.from('change_requests').select('*');
+            const realInvoices = cleanInv.data ?? [];
+            setInvoices(realInvoices.map(mapInvoiceFromDB));
+            invoiceCountRef.current = realInvoices.length;
+            if (cleanPay.data) setPayments(cleanPay.data.map(mapPaymentFromDB));
+          }
           if (dbRequests) setChangeRequests(dbRequests.map(mapRequestFromDB));
         }
       } catch (err) {
@@ -707,74 +672,21 @@ export default function App() {
     }).format(val);
   };
 
-  // Run dynamic fine logic when time advances or app loads
+
+
+  // Transition sent invoices to overdue when time advances
   useEffect(() => {
     let invoicesUpdated = false;
     const updatedInvoices = invoices.map(inv => {
-      if (inv.status === 'paid' || inv.status === 'cancelled' || inv.status === 'draft') {
-        return inv;
-      }
-
-      // Calculate days elapsed between currentDate and due date
+      if (inv.status !== 'sent') return inv;
       const due = new Date(inv.dueDate);
       const curr = new Date(currentDate);
-      const diffTime = curr.getTime() - due.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      // Overdue applies after the grace period of 5 days
-      if (diffDays > settings.gracePeriodDays) {
-        const activeFineDays = diffDays - settings.gracePeriodDays;
-        const newFineAmount = activeFineDays * settings.finePerDay;
-
-        if (inv.fineAmount !== newFineAmount) {
-          invoicesUpdated = true;
-          const originalBase = inv.maintenanceFee + inv.waterUsageCharge + inv.otherMaintenanceCharge + inv.transferFee;
-
-          // Generate automated WhatsApp notifications
-          const messageId = `MSG-AUTO-${inv.id}-${activeFineDays}`;
-          const messageExists = messages.some(m => m.id === messageId);
-          if (!messageExists) {
-            const timeStr = new Date(currentDate).toLocaleDateString('en-IN', { hour: '2-digit', minute: '2-digit' } as Intl.DateTimeFormatOptions);
-
-            const textContent = `⚠️ OVERDUE PENALTY ALERT ⚠️\n\nDear member,\n\nInvoice ${inv.id} for Shade ${inv.shadeId} is now ${diffDays} days past its due date.\n\n• Base Maintenance & Charges: ${formatCurrency(originalBase)}\n• Fine Accrued: ${formatCurrency(newFineAmount)} (₹100/day)\n• Total Outstanding: ${formatCurrency(originalBase + newFineAmount)}\n\nPlease clear your ledger immediately.`;
-
-            const newMsgs: WhatsAppMessage[] = [
-              {
-                id: `${messageId}-renter`,
-                phone: inv.renterPhone || inv.ownerPhone,
-                timestamp: `${currentDate} ${timeStr}`,
-                messageType: 'overdue_fine',
-                content: textContent,
-                sent: true,
-                invoiceId: inv.id
-              }
-            ];
-
-            if (inv.renterId && inv.ownerPhone !== inv.renterPhone) {
-              newMsgs.push({
-                id: `${messageId}-owner`,
-                phone: inv.ownerPhone,
-                timestamp: `${currentDate} ${timeStr}`,
-                messageType: 'overdue_fine',
-                content: textContent,
-                sent: true,
-                invoiceId: inv.id
-              });
-            }
-
-            supabase.from('whatsapp_messages').insert(newMsgs.map(mapMessageToDB)).then(({ error }) => {
-              if (!error) {
-                setMessages(prev => [...prev, ...newMsgs]);
-              }
-            });
-          }
-
-          return {
-            ...inv,
-            status: 'overdue' as const,
-            fineAmount: newFineAmount,
-            totalAmount: originalBase + newFineAmount
-          };
-        }
+      if (curr > due) {
+        invoicesUpdated = true;
+        return {
+          ...inv,
+          status: 'overdue' as const
+        };
       }
       return inv;
     });
@@ -785,21 +697,21 @@ export default function App() {
         supabase.from('invoices').update(mapInvoiceToDB(inv)).eq('id', inv.id)
       )).then(() => {
         setInvoices(updatedInvoices);
-        addToast('Late fees processed. Fines updated in database.', 'info');
+        addToast('Invoice statuses updated to overdue.', 'info');
       }).catch(err => {
         console.error('Error syncing overdue invoices:', err);
       });
     }
-  }, [currentDate, invoices, settings, messages]);
+  }, [currentDate, invoices]);
 
   // 2. Generate Invoices - Individual
   const handleGenerateSingleInvoice = async (
     shadeId: string,
     dueDateStr: string,
-    newWater: number,
     otherName: string,
     otherCharge: number,
-    months: number
+    _months: number,
+    silent = false
   ) => {
     const shade = shades.find(s => s.id === shadeId);
     if (!shade || shade.status !== 'occupied' || !shade.ownerId) {
@@ -811,20 +723,16 @@ export default function App() {
     const renter = shade.renterId ? owners.find(o => o.id === shade.renterId) : null;
     if (!owner) return;
 
-    const oldWater = shade.hasWaterSupply !== false ? shade.lastWaterReading : 0;
-    const resolvedNewWater = shade.hasWaterSupply !== false ? newWater : 0;
-    const waterUnits = shade.hasWaterSupply !== false ? (resolvedNewWater - oldWater) : 0;
-    const waterCost = waterUnits > 0 ? waterUnits * settings.waterRate : 0;
-
-    // Maintenance calculated based on months multiplier (700 base is for 2 months, so 350 per month)
-    const baseMaintenance = Math.round((shade.fixedMaintenance / 2) * months);
+    // Fixed to 1 Year (12 months)
+    const billingMonths = 12;
+    const baseMaintenance = settings.defaultMaintenance;
     const tFee = shade.transferFeeTriggered ? settings.transferFee : 0;
 
-    // Subtotal excluding GST
-    const totalVal = baseMaintenance + waterCost + otherCharge + tFee;
+    const totalVal = baseMaintenance + otherCharge + tFee;
 
     const prefix = settings.invoicePrefix || 'INV-';
-    const invoiceId = `${prefix}2026-0${invoices.length + 1}`;
+    const invoiceSeq = String(invoiceCountRef.current + 1).padStart(3, '0');
+    const invoiceId = `${prefix}${new Date().getFullYear()}-${invoiceSeq}`;
 
     const newInv: Invoice = {
       id: invoiceId,
@@ -836,14 +744,10 @@ export default function App() {
       renterName: renter ? renter.name : null,
       renterPhone: renter ? renter.phone : null,
       maintenanceFee: baseMaintenance,
-      billingMonths: months,
-      oldWaterReading: oldWater,
-      newWaterReading: resolvedNewWater,
-      waterUsageCharge: waterCost,
+      billingMonths: billingMonths,
       otherMaintenanceName: otherName || '',
       otherMaintenanceCharge: otherCharge,
       transferFee: tFee,
-      fineAmount: 0,
       totalAmount: totalVal,
       generatedDate: currentDate,
       dueDate: dueDateStr,
@@ -856,11 +760,9 @@ export default function App() {
       const { error: invErr } = await supabase.from('invoices').insert([mapInvoiceToDB(newInv)]);
       if (invErr) throw invErr;
 
-      // Update shade readings
+      // Update shade transfer trigger flag if any
       const updatedShade = {
         ...shade,
-        lastWaterReading: shade.hasWaterSupply !== false ? resolvedNewWater : 0,
-        currentWaterReading: shade.hasWaterSupply !== false ? resolvedNewWater : 0,
         transferFeeTriggered: false
       };
 
@@ -870,70 +772,20 @@ export default function App() {
         .eq('id', shadeId);
       if (shadeErr) throw shadeErr;
 
+      invoiceCountRef.current += 1;
       setInvoices(prev => [...prev, newInv]);
       setShades(prev => prev.map(s => s.id === shadeId ? updatedShade : s));
 
       addAuditLog('invoice_created', `Invoice ${invoiceId}`, `Shade ${shadeId} | Amount ₹${totalVal}`);
-      addToast(`Generated Invoice ${invoiceId} for Shade ${shadeId}.`, 'success');
+      if (!silent) addToast(`Generated Invoice ${invoiceId} for Shade ${shadeId}.`, 'success');
     } catch (err) {
-      addToast(`Error generating invoice: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      const msg = err instanceof Error ? err.message : (err as any)?.message || JSON.stringify(err);
+      addToast(`Error generating invoice: ${msg}`, 'error');
     }
   };
 
   // 4. Dispatch Invoice via WhatsApp Simulation (Dual Delivery)
-  const handleSendWhatsApp = async (invoiceId: string) => {
-    const inv = invoices.find(i => i.id === invoiceId);
-    if (!inv) return;
 
-    const updatedInv = { ...inv, status: 'sent' as const };
-
-    try {
-      const { error: invErr } = await supabase
-        .from('invoices')
-        .update(mapInvoiceToDB(updatedInv))
-        .eq('id', invoiceId);
-      if (invErr) throw invErr;
-
-      setInvoices(prev => prev.map(i => i.id === invoiceId ? updatedInv : i));
-
-      const timeStr = new Date(currentDate).toLocaleDateString('en-IN', { hour: '2-digit', minute: '2-digit' } as Intl.DateTimeFormatOptions);
-      const combMaint = inv.maintenanceFee + inv.waterUsageCharge + inv.otherMaintenanceCharge + inv.transferFee;
-      const content = `Dear member,\n\nYour Shade ${inv.shadeId} maintenance invoice ${inv.id} has been generated.\n\n• Maintenance + Water: ${formatCurrency(combMaint)}\n• Total Due: ${formatCurrency(inv.totalAmount)}\n• Due Date: ${inv.dueDate}\n\nPlease scan the QR code to clear payments. [UPI QR Code]`;
-
-      const renterMsg: WhatsAppMessage = {
-        id: `MSG-REN-${Date.now()}`,
-        phone: inv.renterPhone || inv.ownerPhone,
-        timestamp: `${currentDate} ${timeStr}`,
-        messageType: 'invoice_sent',
-        content: content.replace('Dear member', `Dear ${inv.renterName || inv.ownerName}`),
-        sent: true,
-        invoiceId
-      };
-
-      const newMsgs = [renterMsg];
-
-      if (inv.renterId && inv.ownerPhone !== inv.renterPhone) {
-        const ownerMsg: WhatsAppMessage = {
-          id: `MSG-OWN-${Date.now()}`,
-          phone: inv.ownerPhone,
-          timestamp: `${currentDate} ${timeStr}`,
-          messageType: 'invoice_sent',
-          content: content.replace('Dear member', `Dear Owner ${inv.ownerName}`),
-          sent: true,
-          invoiceId
-        };
-        newMsgs.push(ownerMsg);
-      }
-
-      const { error: msgErr } = await supabase.from('whatsapp_messages').insert(newMsgs.map(mapMessageToDB));
-      if (msgErr) throw msgErr;
-
-      setMessages(prev => [...prev, ...newMsgs]);
-      addToast(`Invoice WhatsApp dispatched to ${inv.renterName ? 'both Tenant & Owner' : 'Owner'}.`, 'success');
-    } catch (err) {
-      addToast(`Error dispatching WhatsApp invoice: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
-  };
 
   const handleUpdateInvoiceStatus = async (
     invoiceId: string,
@@ -944,9 +796,32 @@ export default function App() {
     const inv = invoices.find(i => i.id === invoiceId);
     if (!inv) return;
 
+    // Under 3 months discount check helper
+    const isUnder3Months = (genDateStr: string, payDateStr: string) => {
+      const gen = new Date(genDateStr);
+      const pay = new Date(payDateStr);
+      const months = (pay.getFullYear() - gen.getFullYear()) * 12 + pay.getMonth() - gen.getMonth();
+      if (months < 3) return true;
+      if (months === 3) return pay.getDate() < gen.getDate();
+      return false;
+    };
+
+    let finalTotal = inv.totalAmount;
+    let finalMaintenance = inv.maintenanceFee;
+    if (status === 'paid') {
+      const payDate = currentDate;
+      if (isUnder3Months(inv.generatedDate, payDate)) {
+        const discount = Math.round(inv.maintenanceFee * 0.1);
+        finalMaintenance = inv.maintenanceFee - discount;
+        finalTotal = finalMaintenance + inv.otherMaintenanceCharge + inv.transferFee;
+      }
+    }
+
     const updatedInv = {
       ...inv,
       status,
+      maintenanceFee: finalMaintenance,
+      totalAmount: finalTotal,
       paymentMethod: paymentMethod || null,
       paymentDate: status === 'paid' ? currentDate : null,
       transactionDetails: details || ''
@@ -979,36 +854,6 @@ export default function App() {
         if (payErr) throw payErr;
         setPayments(prev => [newPayRecord, ...prev]);
 
-        // WhatsApp payment receipt
-        const timeStr = new Date(currentDate).toLocaleDateString('en-IN', { hour: '2-digit', minute: '2-digit' } as Intl.DateTimeFormatOptions);
-        const confMsg: WhatsAppMessage = {
-          id: `MSG-PAID-${Date.now()}`,
-          phone: updatedInv.renterPhone || updatedInv.ownerPhone,
-          timestamp: `${currentDate} ${timeStr}`,
-          messageType: 'invoice_sent',
-          content: `✅ PAYMENT RECEIVED ✅\n\nDear ${updatedInv.renterName || updatedInv.ownerName},\n\nThank you! We have received payment of ${formatCurrency(updatedInv.totalAmount)} for Invoice ${updatedInv.id} (Shade ${updatedInv.shadeId}).\n\n• Method: ${paymentMethod?.toUpperCase()}\n• Receipt Ref: ${details || 'Logged'}\n\nYour society ledger is currently clear.`,
-          sent: true,
-          invoiceId
-        };
-
-        const newMsgs = [confMsg];
-
-        if (updatedInv.renterId && updatedInv.ownerPhone !== updatedInv.renterPhone) {
-          const ownerConf: WhatsAppMessage = {
-            id: `MSG-PAID-OWN-${Date.now()}`,
-            phone: updatedInv.ownerPhone,
-            timestamp: `${currentDate} ${timeStr}`,
-            messageType: 'invoice_sent',
-            content: `✅ PAYMENT RECEIVED NOTICE ✅\n\nDear Owner ${updatedInv.ownerName},\n\nPayment of ${formatCurrency(updatedInv.totalAmount)} has been cleared by tenant for Invoice ${updatedInv.id} (Shade ${updatedInv.shadeId}).\n\nLedger status: Paid.`,
-            sent: true,
-            invoiceId
-          };
-          newMsgs.push(ownerConf);
-        }
-
-        const { error: msgErr } = await supabase.from('whatsapp_messages').insert(newMsgs.map(mapMessageToDB));
-        if (msgErr) throw msgErr;
-        setMessages(prev => [...prev, ...newMsgs]);
       }
 
       addAuditLog(
@@ -1043,43 +888,6 @@ export default function App() {
     }
   };
 
-  // 7. Manual chat send simulator (unused in production)
-  /*
-  const handleSendMessage = async (phone: string, text: string) => {
-    const timeStr = new Date(currentDate).toLocaleDateString('en-IN', { hour: '2-digit', minute: '2-digit' } as Intl.DateTimeFormatOptions);
-    const newMsg: WhatsAppMessage = {
-      id: `MSG-USER-${Date.now()}`,
-      phone,
-      timestamp: `${currentDate} ${timeStr}`,
-      messageType: 'invoice_sent',
-      content: text,
-      sent: true,
-      invoiceId: ''
-    };
-
-    try {
-      const { error: sendErr } = await supabase.from('whatsapp_messages').insert([mapMessageToDB(newMsg)]);
-      if (sendErr) throw sendErr;
-      setMessages(prev => [...prev, newMsg]);
-
-      setTimeout(async () => {
-        const replyMsg: WhatsAppMessage = {
-          id: `MSG-REPLY-${Date.now()}`,
-          phone,
-          timestamp: `${currentDate} ${timeStr}`,
-          messageType: 'invoice_sent',
-          content: `Hello, this is an automated response from Fortune Industrial Park Office. For payment queries or cheque deposits, please visit our registry office. Thank you.`,
-          sent: false,
-          invoiceId: ''
-        };
-        await supabase.from('whatsapp_messages').insert([mapMessageToDB(replyMsg)]);
-        setMessages(prev => [...prev, replyMsg]);
-      }, 1000);
-    } catch (err) {
-      console.error('Error sending message:', err);
-    }
-  };
-  */
 
   const isColumnMissingError = (err: unknown) => {
     if (err && typeof err === 'object' && 'code' in err) {
@@ -1093,19 +901,36 @@ export default function App() {
     return false;
   };
 
+  // Optional shade columns that may not exist yet on older DBs, stripped one at a time
+  // (newest/least-critical first) so a single missing column doesn't also drop fields
+  // that DO exist, like penalty_disabled, from the write.
+  const OPTIONAL_SHADE_COLUMNS = ['penalty_disabled_reason', 'documents', 'penalty_disabled'] as const;
+
+  const writeShadeWithFallback = async (
+    payload: Record<string, unknown>,
+    performWrite: (p: Record<string, unknown>) => Promise<{ error: unknown }>
+  ) => {
+    let currentPayload = payload;
+    let { error } = await performWrite(currentPayload);
+    for (const col of OPTIONAL_SHADE_COLUMNS) {
+      if (!error || !isColumnMissingError(error) || !(col in currentPayload)) continue;
+      const rest = { ...currentPayload };
+      delete rest[col];
+      currentPayload = rest;
+      ({ error } = await performWrite(currentPayload));
+    }
+    return error;
+  };
+
   // Add / Update Shade (persisted, with column fallback)
-  const handleAddShade = async (ns: Omit<Shade, 'currentWaterReading'>) => {
-    const fullShade: Shade = { ...ns, currentWaterReading: ns.lastWaterReading };
+  const handleAddShade = async (ns: Shade) => {
     try {
-      let { error } = await supabase.from('shades').insert([mapShadeToDB(fullShade)]);
-      if (error && isColumnMissingError(error)) {
-        // Retry without new optional columns
-        const { penalty_disabled: _pd, ...basePayload } = mapShadeToDB(fullShade);
-        const retry = await supabase.from('shades').insert([basePayload]);
-        error = retry.error;
-      }
+      const error = await writeShadeWithFallback(
+        mapShadeToDB(ns),
+        async (p) => await supabase.from('shades').insert([p])
+      );
       if (error) throw error;
-      setShades(prev => [...prev, fullShade]);
+      setShades(prev => [...prev, ns]);
       addAuditLog('shade_added', `Shade ${ns.id}`, `${ns.block} · ${ns.floor}`);
       addToast(`Shade ${ns.id} registered.`, 'success');
     } catch (err) {
@@ -1115,12 +940,10 @@ export default function App() {
 
   const handleUpdateShade = async (us: Shade) => {
     try {
-      let { error } = await supabase.from('shades').update(mapShadeToDB(us)).eq('id', us.id);
-      if (error && isColumnMissingError(error)) {
-        const { penalty_disabled: _pd, ...basePayload } = mapShadeToDB(us);
-        const retry = await supabase.from('shades').update(basePayload).eq('id', us.id);
-        error = retry.error;
-      }
+      const error = await writeShadeWithFallback(
+        mapShadeToDB(us),
+        async (p) => await supabase.from('shades').update(p).eq('id', us.id)
+      );
       if (error) throw error;
       setShades(prev => prev.map(s => s.id === us.id ? us : s));
       addAuditLog('shade_updated', `Shade ${us.id}`);
@@ -1129,6 +952,8 @@ export default function App() {
       addToast(`Error updating shade: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   };
+
+
 
   // Add / Update Owner (persisted, with column fallback)
   const handleAddOwner = async (no: Owner) => {
@@ -1194,10 +1019,9 @@ export default function App() {
     }
   };
 
-  const handleBulkImportShades = async (newShadesData: Omit<Shade, 'currentWaterReading'>[]) => {
+  const handleBulkImportShades = async (newShadesData: Shade[]) => {
     const fullNewShades: Shade[] = newShadesData.map(ns => ({
       ...ns,
-      currentWaterReading: ns.lastWaterReading,
       renterId: null
     }));
 
@@ -1255,19 +1079,10 @@ export default function App() {
 
   // 10. Record direct payment (from Payments Tab)
   const handleRecordPayment = async (payData: Omit<Payment, 'id'>) => {
-    const pId = `PAY-${Date.now()}`;
-    const newRecord: Payment = {
-      id: pId,
-      ...payData
-    };
-
     try {
-      const { error } = await supabase.from('payments').insert([mapPaymentToDB(newRecord)]);
-      if (error) throw error;
-
-      setPayments(prev => [newRecord, ...prev]);
-
       if (payData.invoiceId) {
+        // Invoice-linked payment: let handleUpdateInvoiceStatus create the payment record
+        // to avoid creating two payment records for the same transaction
         await handleUpdateInvoiceStatus(
           payData.invoiceId,
           'paid',
@@ -1275,6 +1090,12 @@ export default function App() {
           payData.reference
         );
       } else {
+        // Advance/direct payment without an invoice: insert manually
+        const pId = `PAY-${Date.now()}`;
+        const newRecord: Payment = { id: pId, ...payData };
+        const { error } = await supabase.from('payments').insert([mapPaymentToDB(newRecord)]);
+        if (error) throw error;
+        setPayments(prev => [newRecord, ...prev]);
         addToast(`Direct Payment of ${formatCurrency(payData.amount)} logged for Shade ${payData.shadeId}.`, 'success');
       }
     } catch (err) {
@@ -1294,14 +1115,107 @@ export default function App() {
     }
   };
 
+  const handleUpdateAuditLog = async (updatedLog: AuditLog) => {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .update(mapAuditLogToDB(updatedLog))
+        .eq('id', updatedLog.id);
+      if (error) throw error;
+
+      setAuditLogs(prev => prev.map(l => l.id === updatedLog.id ? updatedLog : l));
+      addToast(`Audit log entry ${updatedLog.id} updated.`, 'success');
+    } catch (err) {
+      addToast(`Error updating audit log: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
+  const handleDeleteAuditLog = async (logId: string) => {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .delete()
+        .eq('id', logId);
+      if (error) throw error;
+
+      setAuditLogs(prev => prev.filter(l => l.id !== logId));
+      addToast(`Audit log entry ${logId} deleted.`, 'info');
+    } catch (err) {
+      addToast(`Error deleting audit log: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
+  const handleBulkImportAuditLogs = async (importedLogs: AuditLog[]) => {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .upsert(importedLogs.map(mapAuditLogToDB));
+      if (error) throw error;
+
+      setAuditLogs(prev => {
+        const filtered = prev.filter(p => !importedLogs.some(f => f.id === p.id));
+        return [...filtered, ...importedLogs].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      });
+      addToast(`Successfully imported ${importedLogs.length} audit log entries.`, 'success');
+    } catch (err) {
+      addToast(`Error importing audit logs: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
+  const handleBulkImportPayments = async (newPaymentsData: Omit<Payment, 'id'>[]) => {
+    try {
+      const importedPayments: Payment[] = newPaymentsData.map((np, idx) => ({
+        id: `PAY-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+        ...np
+      }));
+
+      // Insert payments into Supabase
+      const { error } = await supabase.from('payments').insert(importedPayments.map(mapPaymentToDB));
+      if (error) throw error;
+
+      // Sync invoices linked to these payments
+      const linkedInvoiceIds = importedPayments
+        .map(p => p.invoiceId)
+        .filter((id): id is string => !!id);
+
+      if (linkedInvoiceIds.length > 0) {
+        const updatedInvoices = invoices.map(inv => {
+          if (linkedInvoiceIds.includes(inv.id) && inv.status !== 'paid') {
+            const matchedPayment = importedPayments.find(p => p.invoiceId === inv.id);
+            return {
+              ...inv,
+              status: 'paid' as const,
+              paymentMethod: matchedPayment ? (matchedPayment.method === 'UPI' ? 'online' as const : matchedPayment.method === 'Cash' ? 'cash' as const : matchedPayment.method === 'Cheque' ? 'cheque' as const : 'bank_transfer' as const) : null,
+              paymentDate: matchedPayment?.date || currentDate,
+              transactionDetails: matchedPayment?.reference || 'Excel Import'
+            };
+          }
+          return inv;
+        });
+
+        // Sync database for updated invoices
+        const dbInvoicesToUpdate = updatedInvoices.filter((inv, idx) => inv !== invoices[idx]);
+        await Promise.all(dbInvoicesToUpdate.map(inv => 
+          supabase.from('invoices').update(mapInvoiceToDB(inv)).eq('id', inv.id)
+        ));
+
+        setInvoices(updatedInvoices);
+      }
+
+      setPayments(prev => [...importedPayments, ...prev]);
+      addToast(`Successfully imported ${importedPayments.length} payment records.`, 'success');
+      addAuditLog('payment_marked', `Bulk Import`, `Imported ${importedPayments.length} payments`);
+    } catch (err) {
+      addToast(`Error importing payments: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    }
+  };
+
   // 10b. Update Invoice details
   const handleUpdateInvoice = async (oldId: string, updatedInvoice: Invoice) => {
     const total =
       updatedInvoice.maintenanceFee +
-      updatedInvoice.waterUsageCharge +
       updatedInvoice.otherMaintenanceCharge +
-      updatedInvoice.transferFee +
-      updatedInvoice.fineAmount;
+      updatedInvoice.transferFee;
 
     const finalInvoice = {
       ...updatedInvoice,
@@ -1316,98 +1230,9 @@ export default function App() {
       if (invErr) throw invErr;
 
       setInvoices(prev => prev.map(inv => inv.id === oldId ? finalInvoice : inv));
-
-      const targetShade = shades.find(s => s.id === finalInvoice.shadeId);
-      if (targetShade) {
-        const updatedShade = {
-          ...targetShade,
-          lastWaterReading: finalInvoice.oldWaterReading,
-          currentWaterReading: finalInvoice.newWaterReading
-        };
-
-        const { error: shadeErr } = await supabase
-          .from('shades')
-          .update(mapShadeToDB(updatedShade))
-          .eq('id', updatedShade.id);
-        if (shadeErr) throw shadeErr;
-
-        setShades(prev => prev.map(s => s.id === finalInvoice.shadeId ? updatedShade : s));
-      }
       addToast(`Invoice ${finalInvoice.id} details updated.`, 'success');
     } catch (err) {
       addToast(`Error updating invoice: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
-  };
-
-  // 11. Fines logic
-  const handleAddFine = async (fineData: Omit<FineRecord, 'id'>) => {
-    const fId = `FINE-${Date.now()}`;
-    const newFine: FineRecord = {
-      id: fId,
-      ...fineData
-    };
-
-    try {
-      const { error: fineErr } = await supabase.from('fines').insert([mapFineToDB(newFine)]);
-      if (fineErr) throw fineErr;
-
-      setFines(prev => [newFine, ...prev]);
-      addAuditLog('fine_added', `Shade ${fineData.shadeId}`, `₹${fineData.amount} — ${fineData.reason}`);
-
-      if (fineData.invoiceId) {
-        const inv = invoices.find(i => i.id === fineData.invoiceId);
-        if (inv) {
-          const originalBase = inv.maintenanceFee + inv.waterUsageCharge + inv.otherMaintenanceCharge + inv.transferFee;
-          const newFineAmt = inv.fineAmount + fineData.amount;
-          const updatedInv = {
-            ...inv,
-            fineAmount: newFineAmt,
-            totalAmount: originalBase + newFineAmt
-          };
-
-          const { error: invErr } = await supabase
-            .from('invoices')
-            .update(mapInvoiceToDB(updatedInv))
-            .eq('id', inv.id);
-          if (invErr) throw invErr;
-
-          setInvoices(prev => prev.map(i => i.id === inv.id ? updatedInv : i));
-        }
-      }
-
-      addToast(`Fine of ${formatCurrency(fineData.amount)} applied to Shade ${fineData.shadeId}.`, 'success');
-    } catch (err) {
-      addToast(`Error adding fine: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
-  };
-
-  const handleDeleteFine = async (fId: string) => {
-    try {
-      const { error } = await supabase.from('fines').delete().eq('id', fId);
-      if (error) throw error;
-
-      setFines(prev => prev.filter(f => f.id !== fId));
-      addAuditLog('fine_deleted', `Fine ${fId}`);
-      addToast('Fine penalty removed.', 'info');
-    } catch (err) {
-      addToast(`Error deleting fine: ${err instanceof Error ? err.message : String(err)}`, 'error');
-    }
-  };
-
-  const handlePayFine = async (fId: string) => {
-    const targetFine = fines.find(f => f.id === fId);
-    if (!targetFine) return;
-    const paidFine = { ...targetFine, status: 'paid' as const };
-
-    try {
-      const { error } = await supabase.from('fines').update(mapFineToDB(paidFine)).eq('id', fId);
-      if (error) throw error;
-
-      setFines(prev => prev.map(f => f.id === fId ? paidFine : f));
-      addAuditLog('fine_paid', `Fine ${fId}`, `Shade ${targetFine.shadeId} — ₹${targetFine.amount}`);
-      addToast('Fine marked as paid.', 'success');
-    } catch (err) {
-      addToast(`Error marking fine as paid: ${err instanceof Error ? err.message : String(err)}`, 'error');
     }
   };
 
@@ -1417,12 +1242,11 @@ export default function App() {
       setIsLoading(true);
 
       await supabase.from('payments').delete().neq('id', 'dummy');
-      await supabase.from('fines').delete().neq('id', 'dummy');
-      await supabase.from('whatsapp_messages').delete().neq('id', 'dummy');
       await supabase.from('invoices').delete().neq('id', 'dummy');
       await supabase.from('shades').delete().neq('id', 'dummy');
       await supabase.from('owners').delete().neq('id', 'dummy');
       await supabase.from('change_requests').delete().neq('id', 'dummy');
+      await supabase.from('audit_logs').delete().neq('id', 'dummy');
       await supabase.from('system_settings').delete().neq('id', 0);
 
       await supabase.from('system_settings').insert([mapSettingsToDB(INITIAL_SETTINGS)]);
@@ -1430,18 +1254,15 @@ export default function App() {
       await supabase.from('shades').insert(INITIAL_SHADES.map(mapShadeToDB));
       await supabase.from('invoices').insert(INITIAL_INVOICES.map(mapInvoiceToDB));
       await supabase.from('payments').insert(INITIAL_PAYMENTS.map(mapPaymentToDB));
-      await supabase.from('whatsapp_messages').insert(INITIAL_MESSAGES.map(mapMessageToDB));
 
       setSettings(INITIAL_SETTINGS);
       setOwners(INITIAL_OWNERS);
       setShades(INITIAL_SHADES);
       setInvoices(INITIAL_INVOICES);
       setPayments(INITIAL_PAYMENTS);
-      setMessages(INITIAL_MESSAGES);
-      setFines([]);
       setChangeRequests([]);
       setAuditLogs([]);
-      setCurrentDate('2026-05-16');
+      setCurrentDate('2026-03-10');
       setTransferShadeId(null);
 
       addToast('Database cleared and reset to defaults.', 'info');
@@ -1519,8 +1340,8 @@ export default function App() {
               animation: 'pulseRing 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
             }} />
             <img
-              src="/fortune_favicon.avif"
-              alt="Fortune Industrial Park Logo"
+              src="/vibrant_favicon.png"
+              alt="Vibrant Industrial Park Logo"
               style={{
                 width: '72px',
                 height: '72px',
@@ -1542,7 +1363,7 @@ export default function App() {
             WebkitTextFillColor: 'transparent',
             textAlign: 'center'
           }}>
-            Fortune Industrial Park
+            Vibrant Industrial Park
           </h2>
           <p style={{
             margin: '8px 0 0 0',
@@ -1652,7 +1473,7 @@ export default function App() {
               <LayoutDashboard size={20} />
             </div>
             <div className="brand-info">
-              <h2>Fortune Industrial Park</h2>
+              <h2>Vibrant Industrial Park</h2>
               <span>Billing & Payments Pro</span>
             </div>
           </div>
@@ -1665,7 +1486,6 @@ export default function App() {
               cursor: 'pointer',
               padding: '6px',
               borderRadius: '6px',
-              display: 'none', // Overridden in CSS media queries to show on mobile
               alignItems: 'center',
               justifyContent: 'center',
               border: '1px solid var(--border-color)',
@@ -1707,7 +1527,9 @@ export default function App() {
             <span className="status-dot"></span>
             <span>LIVE</span>
           </div>
-          <span className="status-date">May 2026</span>
+          <span className="status-date">
+            {new Date(currentDate).toLocaleString('en-IN', { month: 'short', year: 'numeric' })}
+          </span>
         </div>
 
         <ul className="sidebar-menu">
@@ -1781,30 +1603,7 @@ export default function App() {
               <span>Payments</span>
             </button>
           </li>
-          <li>
-            <button
-              className={`menu-item ${activeTab === 'fines' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('fines');
-                setIsMobileMenuOpen(false);
-              }}
-            >
-              <AlertTriangle size={18} />
-              <span>Fines</span>
-            </button>
-          </li>
-          <li>
-            <button
-              className={`menu-item ${activeTab === 'simulator' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('simulator');
-                setIsMobileMenuOpen(false);
-              }}
-            >
-              <MessageSquare size={18} />
-              <span>WhatsApp Demo</span>
-            </button>
-          </li>
+
 
 
           <li className="menu-section-label">Analytics</li>
@@ -1900,7 +1699,6 @@ export default function App() {
                 color: 'var(--text-primary)',
                 cursor: 'pointer',
                 padding: '8px',
-                display: 'none', // Overridden in CSS media queries to show on mobile
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: '8px',
@@ -1918,26 +1716,21 @@ export default function App() {
                 {activeTab === 'owners' && 'Owners & Renters Registry'}
                 {activeTab === 'invoices' && 'Invoices Registry'}
                 {activeTab === 'payments' && 'Payments History'}
-                {activeTab === 'fines' && 'Fines & Penalties Log'}
-
                 {activeTab === 'settings' && 'Global Configurations'}
                 {activeTab === 'requests' && 'Co-Admin Change Requests'}
                 {activeTab === 'reports' && 'Financial Reports'}
                 {activeTab === 'auditlog' && 'Audit Log'}
-                {activeTab === 'simulator' && 'WhatsApp Demo'}
               </h1>
               <p style={{ margin: 0 }}>
                 {activeTab === 'dashboard' && 'Property overview & KPIs'}
-                {activeTab === 'shades' && 'Manage Fortune Industrial Park units and shades'}
+                {activeTab === 'shades' && 'Manage Vibrant Industrial Park units and shades'}
                 {activeTab === 'owners' && 'Member registry, contact directory, and transfers'}
                 {activeTab === 'invoices' && 'Maintenance and utility billing records'}
                 {activeTab === 'payments' && 'Direct cash/cheque collected receipts'}
-                {activeTab === 'fines' && 'Late payment fees and society penalties'}
                 {activeTab === 'settings' && 'Adjust default rates, grace periods, and late fees'}
                 {activeTab === 'requests' && 'Review and approve/reject database modification requests'}
                 {activeTab === 'reports' && 'Monthly collection, penalty trends, and payment performance'}
                 {activeTab === 'auditlog' && 'All actions performed in the system'}
-                {activeTab === 'simulator' && 'Interactive WhatsApp automation preview — no API key needed'}
               </p>
             </div>
           </div>
@@ -1954,7 +1747,7 @@ export default function App() {
               {overdueCount > 0 && <span className="badge-dot"></span>}
             </div>
 
-            {/* User Profile Card */}
+            {/* User Profile Card with Role Switcher */}
             <div
               className="user-profile-header"
               style={{
@@ -1978,15 +1771,57 @@ export default function App() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: '700',
-                  fontSize: '13px'
+                  fontSize: '13px',
+                  flexShrink: 0
                 }}
               >
                 {currentAdmin.avatar}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px' }}>
                 <strong style={{ color: 'var(--text-primary)', fontWeight: '700', lineHeight: '1.2' }}>{currentAdmin.name}</strong>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>{currentAdmin.email}</span>
+                <select
+                  value={currentAdmin.id}
+                  onChange={(e) => {
+                    const sel = ADMINS.find(a => a.id === e.target.value);
+                    if (sel) {
+                      setCurrentAdmin(sel);
+                      addToast(`Switched to: ${sel.name} (${sel.role})`, 'info');
+                    }
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '11px',
+                    padding: 0,
+                    cursor: 'pointer',
+                    outline: 'none',
+                    fontWeight: '600',
+                    color: currentAdmin.role === 'Admin' ? 'var(--color-success)' :
+                           currentAdmin.role === 'Secretary' ? 'var(--color-info)' : 'var(--color-pending)'
+                  }}
+                >
+                  {ADMINS.map(a => (
+                    <option key={a.id} value={a.id} style={{ backgroundColor: '#ffffff', color: 'var(--text-primary)' }}>
+                      {a.name} — {a.role}
+                    </option>
+                  ))}
+                </select>
               </div>
+              {/* Role badge */}
+              <span style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                padding: '2px 8px',
+                borderRadius: '999px',
+                backgroundColor: currentAdmin.role === 'Admin' ? 'var(--color-success-bg)' :
+                                 currentAdmin.role === 'Secretary' ? 'var(--color-info-bg)' : 'var(--color-pending-bg)',
+                color: currentAdmin.role === 'Admin' ? 'var(--color-success)' :
+                       currentAdmin.role === 'Secretary' ? 'var(--color-info)' : 'var(--color-pending)',
+                letterSpacing: '0.3px',
+                whiteSpace: 'nowrap'
+              }}>
+                {currentAdmin.role}
+              </span>
             </div>
           </div>
         </header>
@@ -1997,7 +1832,8 @@ export default function App() {
             <DashboardView
               shades={shades}
               invoices={invoices}
-              owners={owners}
+              currentDate={currentDate}
+              settings={settings}
               setActiveTab={setActiveTab}
             />
           )}
@@ -2007,7 +1843,6 @@ export default function App() {
               shades={shades}
               owners={owners}
               settings={settings}
-              invoices={invoices}
               onAddShade={handleAddShade}
               onUpdateShade={handleUpdateShade}
               onBulkImportShades={handleBulkImportShades}
@@ -2032,6 +1867,7 @@ export default function App() {
               transferShadeId={transferShadeId}
               onCloseTransferModal={() => setTransferShadeId(null)}
               onBulkImportOwners={handleBulkImportOwners}
+              currentRole={currentAdmin.role}
             />
           )}
 
@@ -2041,14 +1877,15 @@ export default function App() {
               shades={shades}
               owners={owners}
               settings={settings}
+              currentDate={currentDate}
               onGenerateSingleInvoice={handleGenerateSingleInvoice}
               onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
               onDeleteInvoice={handleDeleteInvoice}
-              onSendWhatsApp={handleSendWhatsApp}
               onUpdateInvoice={handleUpdateInvoice}
               preselectedShadeId={preselectedShadeId}
               clearPreselectedShadeId={() => setPreselectedShadeId(null)}
               onBulkImportInvoices={handleBulkImportInvoices}
+              currentRole={currentAdmin.role}
             />
           )}
 
@@ -2056,21 +1893,15 @@ export default function App() {
             <PaymentsView
               payments={payments}
               invoices={invoices}
+              currentDate={currentDate}
               onRecordPayment={handleRecordPayment}
               onDeletePayment={handleDeletePayment}
+              onBulkImportPayments={handleBulkImportPayments}
+              currentRole={currentAdmin.role}
             />
-          )}
+          ) }
 
-          {activeTab === 'fines' && (
-            <FinesView
-              fines={fines}
-              shades={shades}
-              invoices={invoices}
-              onAddFine={handleAddFine}
-              onDeleteFine={handleDeleteFine}
-              onPayFine={handlePayFine}
-            />
-          )}
+
 
 
 
@@ -2091,10 +1922,7 @@ export default function App() {
                       const fallbackPayload = {
                         id: 1,
                         default_maintenance: us.defaultMaintenance,
-                        water_rate: us.waterRate,
                         transfer_fee: us.transferFee,
-                        grace_period_days: us.gracePeriodDays,
-                        fine_per_day: us.finePerDay,
                         upi_id: us.upiId,
                         qr_image_url: us.qrImageUrl,
                         society_name: us.societyName,
@@ -2113,14 +1941,21 @@ export default function App() {
                   }
 
                   // Write the custom settings to local storage as fallback
-                  localStorage.setItem('fortune_park_settings', JSON.stringify({
+                  localStorage.setItem('vibrant_park_settings', JSON.stringify({
                     invoiceTitle: us.invoiceTitle,
                     invoicePrefix: us.invoicePrefix,
                     invoiceNotes: us.invoiceNotes
                   }));
 
+                  // When the global maintenance rate changes, sync all shades
+                  if (us.defaultMaintenance !== settings.defaultMaintenance) {
+                    await supabase
+                      .from('shades')
+                      .update({ fixed_maintenance: us.defaultMaintenance });
+                    setShades(prev => prev.map(s => ({ ...s, fixedMaintenance: us.defaultMaintenance })));
+                  }
                   setSettings(us);
-                  addAuditLog('settings_changed', 'System Settings', `Maintenance ₹${us.defaultMaintenance}, Water ₹${us.waterRate}/unit`);
+                  addAuditLog('settings_changed', 'System Settings', `Maintenance ₹${us.defaultMaintenance}`);
                   addToast('Billing parameters and configurations saved successfully.', 'success');
                 } catch (err) {
                   addToast(`Error saving settings: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -2143,63 +1978,25 @@ export default function App() {
             <ReportsView
               invoices={invoices}
               payments={payments}
-              fines={fines}
               shades={shades}
               owners={owners}
+              settings={settings}
             />
           )}
 
           {activeTab === 'auditlog' && (
-            <AuditLogView logs={auditLogs} />
-          )}
-
-          {activeTab === 'simulator' && (
-            <WhatsappSimulator
-              shades={shades}
-              owners={owners}
-              invoices={invoices}
-              messages={messages}
-              settings={settings}
-              onSendMessage={(phone, text) => {
-                setMessages(prev => [...prev, {
-                  id: `msg-${Date.now()}-${phone}`,
-                  phone,
-                  timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
-                  messageType: 'invoice_sent' as const,
-                  content: text,
-                  sent: true,
-                  invoiceId: ''
-                }]);
-              }}
-              onSimulatePayment={(invoiceId) => {
-                setInvoices(prev => prev.map(inv =>
-                  inv.id === invoiceId ? { ...inv, status: 'paid' as const, paidDate: new Date().toISOString().split('T')[0] } : inv
-                ));
-              }}
-              selectedShadeId={selectedSimShadeId}
-              setSelectedShadeId={setSelectedSimShadeId}
+            <AuditLogView
+              logs={auditLogs}
+              onUpdateLog={handleUpdateAuditLog}
+              onDeleteLog={handleDeleteAuditLog}
+              onBulkImportLogs={handleBulkImportAuditLogs}
+              currentRole={currentAdmin.role}
             />
           )}
+
+
         </section>
       </main>
-
-      {/* Backdrop overlay for mobile menu drawer */}
-      {isMobileMenuOpen && (
-        <div
-          className="sidebar-overlay-backdrop"
-          onClick={() => setIsMobileMenuOpen(false)}
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.4)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 99
-          }}
-        />
-      )}
 
       {/* TOAST SYSTEM CODES */}
       <div className="toast-container">

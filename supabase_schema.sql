@@ -19,11 +19,8 @@ CREATE TABLE IF NOT EXISTS shades (
     owner_id TEXT REFERENCES owners(id) ON DELETE SET NULL,
     renter_id TEXT REFERENCES owners(id) ON DELETE SET NULL,
     fixed_maintenance INTEGER NOT NULL DEFAULT 700,
-    last_water_reading INTEGER NOT NULL DEFAULT 0,
-    current_water_reading INTEGER NOT NULL DEFAULT 0,
     transfer_fee_triggered BOOLEAN NOT NULL DEFAULT FALSE,
-    has_water_supply BOOLEAN NOT NULL DEFAULT TRUE,
-    penalty_disabled BOOLEAN NOT NULL DEFAULT FALSE
+    documents TEXT NOT NULL DEFAULT '[]'
 );
 
 -- 3. BILLING INVOICES TABLE
@@ -38,13 +35,9 @@ CREATE TABLE IF NOT EXISTS invoices (
     renter_phone TEXT,
     maintenance_fee INTEGER NOT NULL,
     billing_months INTEGER NOT NULL DEFAULT 1,
-    old_water_reading INTEGER NOT NULL DEFAULT 0,
-    new_water_reading INTEGER NOT NULL DEFAULT 0,
-    water_usage_charge INTEGER NOT NULL DEFAULT 0,
     other_maintenance_name TEXT,
     other_maintenance_charge INTEGER NOT NULL DEFAULT 0,
     transfer_fee INTEGER NOT NULL DEFAULT 0,
-    fine_amount INTEGER NOT NULL DEFAULT 0,
     total_amount INTEGER NOT NULL,
     generated_date TEXT NOT NULL,
     due_date TEXT NOT NULL,
@@ -66,37 +59,24 @@ CREATE TABLE IF NOT EXISTS payments (
     reference TEXT
 );
 
--- 5. FINES LEDGER TABLE
-CREATE TABLE IF NOT EXISTS fines (
-    id TEXT PRIMARY KEY,
-    shade_id TEXT NOT NULL REFERENCES shades(id) ON DELETE CASCADE,
-    invoice_id TEXT REFERENCES invoices(id) ON DELETE SET NULL,
-    owner_name TEXT NOT NULL,
-    amount INTEGER NOT NULL,
-    reason TEXT NOT NULL,
-    date TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (status IN ('unpaid', 'paid'))
-);
 
--- 6. SIMULATED WHATSAPP MESSAGES LOG
+
+-- 5. SIMULATED WHATSAPP MESSAGES LOG
 CREATE TABLE IF NOT EXISTS whatsapp_messages (
     id TEXT PRIMARY KEY,
     phone TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    message_type TEXT NOT NULL CHECK (message_type IN ('invoice_sent', 'reminder_1', 'reminder_final', 'overdue_fine')),
+    message_type TEXT NOT NULL CHECK (message_type IN ('invoice_sent', 'reminder_1', 'reminder_final')),
     content TEXT NOT NULL,
     sent BOOLEAN NOT NULL DEFAULT FALSE,
     invoice_id TEXT REFERENCES invoices(id) ON DELETE CASCADE
 );
 
--- 7. SYSTEM PARAMETERS & SETTINGS (Exactly 1 Config row)
+-- 6. SYSTEM PARAMETERS & SETTINGS (Exactly 1 Config row)
 CREATE TABLE IF NOT EXISTS system_settings (
     id INTEGER PRIMARY KEY CHECK (id = 1) DEFAULT 1,
     default_maintenance INTEGER NOT NULL DEFAULT 700,
-    water_rate INTEGER NOT NULL DEFAULT 30,
     transfer_fee INTEGER NOT NULL DEFAULT 2500,
-    grace_period_days INTEGER NOT NULL DEFAULT 5,
-    fine_per_day INTEGER NOT NULL DEFAULT 100,
     upi_id TEXT NOT NULL DEFAULT '',
     qr_image_url TEXT NOT NULL DEFAULT '',
     society_name TEXT NOT NULL,
@@ -122,13 +102,21 @@ CREATE TABLE IF NOT EXISTS change_requests (
     date TEXT NOT NULL
 );
 
--- 9. POPULATE DEFAULT PARAMETERS ROW (Initial config setup)
-INSERT INTO system_settings (id, default_maintenance, water_rate, transfer_fee, grace_period_days, fine_per_day, upi_id, qr_image_url, society_name, society_address, society_phone, society_bank_details, invoice_title, invoice_prefix, invoice_notes)
+-- 9. AUDIT LOG TABLE (tracks every admin action)
+CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    entity TEXT NOT NULL,
+    performed_by TEXT NOT NULL,
+    role TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    details TEXT
+);
+
+-- 8. POPULATE DEFAULT PARAMETERS ROW (Initial config setup)
+INSERT INTO system_settings (id, default_maintenance, transfer_fee, upi_id, qr_image_url, society_name, society_address, society_phone, society_bank_details, invoice_title, invoice_prefix, invoice_notes)
 VALUES (
     1, 
-    0, 
-    0, 
-    0, 
     0, 
     0, 
     '', 

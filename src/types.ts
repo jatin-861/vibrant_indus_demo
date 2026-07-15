@@ -1,3 +1,11 @@
+export interface ShadeDocument {
+  id: string;
+  name: string;
+  type: string; // mime type, e.g. "application/pdf" or "image/png"
+  dataUrl: string; // base64 data URI or public asset path
+  uploadedDate: string; // YYYY-MM-DD
+}
+
 export interface Shade {
   id: string; // e.g., "SH-001"
   block: string; // e.g., "Block A"
@@ -7,11 +15,8 @@ export interface Shade {
   ownerId: string | null; // references Owner.id (type 'owner')
   renterId: string | null; // references Owner.id (type 'renter')
   fixedMaintenance: number; // e.g., 700 (INR)
-  lastWaterReading: number;
-  currentWaterReading: number;
   transferFeeTriggered: boolean; // if true, add one-time 2500 INR transfer fee
-  hasWaterSupply?: boolean; // if false, disable water supply logging and billing
-  penaltyDisabled?: boolean; // if true, auto-fine is skipped for this shade
+  documents?: ShadeDocument[]; // attached PDFs / images (lease, ownership proof, etc.)
 }
 
 export interface Owner {
@@ -36,13 +41,9 @@ export interface Invoice {
   renterPhone: string | null;
   maintenanceFee: number; // calculated base maintenance (adjusted for billingMonths)
   billingMonths: number; // e.g. 1, 2, 3, etc.
-  oldWaterReading: number;
-  newWaterReading: number;
-  waterUsageCharge: number; // (new - old) * rate
   otherMaintenanceName: string; // e.g., "plumbing"
   otherMaintenanceCharge: number;
   transferFee: number; // 2500 or 0
-  fineAmount: number; // ₹100 per day after grace period, or manual fines
   totalAmount: number; // sum of everything
   generatedDate: string; // YYYY-MM-DD
   dueDate: string; // YYYY-MM-DD
@@ -63,34 +64,11 @@ export interface Payment {
   reference: string;
 }
 
-export interface FineRecord {
-  id: string;
-  shadeId: string;
-  invoiceId: string | null;
-  ownerName: string;
-  amount: number;
-  reason: string;
-  date: string;
-  status: 'unpaid' | 'paid';
-}
-
-export interface WhatsAppMessage {
-  id: string;
-  phone: string;
-  timestamp: string;
-  messageType: 'invoice_sent' | 'reminder_1' | 'reminder_final' | 'overdue_fine';
-  content: string;
-  sent: boolean;
-  invoiceId: string;
-}
 
 export interface SystemSettings {
   defaultMaintenance: number; // ₹720
-  waterRate: number; // ₹30/unit
   transferFee: number; // ₹2500
-  gracePeriodDays: number; // 5 days
-  finePerDay: number; // ₹100/day
-  upiId: string; // e.g., "fortunecommunity@oksbi"
+  upiId: string; // e.g., "vibrantcommunity@oksbi"
   qrImageUrl: string; // Simulated QR image
   societyName: string;
   societyAddress: string;
@@ -100,6 +78,7 @@ export interface SystemSettings {
   invoicePrefix: string; // e.g. "KIN" → KIN-2026-0001
   invoiceNotes: string;
   reminderDays: number[]; // e.g. [3, 1] = send 3 days before & 1 day before due date
+  analyticsYear: number; // year to show in dashboard analytics
 }
 
 export interface AdminRole {
@@ -127,7 +106,6 @@ export interface AuditLog {
   action: 'invoice_created' | 'invoice_edited' | 'invoice_deleted' | 'invoice_voided' |
           'owner_added' | 'owner_updated' | 'tenant_added' | 'tenant_updated' |
           'payment_marked' | 'payment_deleted' |
-          'fine_added' | 'fine_paid' | 'fine_deleted' |
           'shade_added' | 'shade_updated' | 'shade_transferred' |
           'settings_changed' | 'database_reset' | 'whatsapp_sent';
   entity: string; // e.g. "Invoice KIN-2026-0001" or "Owner Ramesh Shah"

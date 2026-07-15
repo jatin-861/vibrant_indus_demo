@@ -1,0 +1,14 @@
+{
+  "name": "fip_payment_receipt",
+  "language": "en",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Dear {{1}}, we have received your payment for invoice {{2}}. Amount paid: Rs.{{3}}. Receipt No: {{4}}, dated {{5}}. Thank you!",
+      "example": {
+        "body_text": [["Vijay Bhai", "KIN-2026-0001", "720", "KIN-RCP-4821", "18 Jun 2026"]]
+      }
+    }
+  ]
+}

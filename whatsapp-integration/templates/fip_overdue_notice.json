@@ -1,0 +1,14 @@
+{
+  "name": "fip_overdue_notice",
+  "language": "en",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Dear {{1}}, invoice {{2}} is now overdue. Original amount Rs.{{3}}, late fine Rs.{{4}}/day, total payable Rs.{{5}}. Please pay immediately.",
+      "example": {
+        "body_text": [["Vijay Bhai", "KIN-2026-0001", "720", "100", "820"]]
+      }
+    }
+  ]
+}

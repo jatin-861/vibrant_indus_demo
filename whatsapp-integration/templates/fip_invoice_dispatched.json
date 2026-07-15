@@ -1,0 +1,14 @@
+{
+  "name": "fip_invoice_dispatched",
+  "language": "en",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Dear {{1}}, your maintenance bill for shade {{2}} has been generated. Invoice {{3}}, due {{4}}. Total due: Rs.{{5}}. Pay via the link in this message or visit the office.",
+      "example": {
+        "body_text": [["Vijay Bhai", "A-101", "KIN-2026-0001", "25 Jun 2026", "720"]]
+      }
+    }
+  ]
+}

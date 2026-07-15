@@ -1,0 +1,14 @@
+{
+  "name": "fip_payment_due_tomorrow",
+  "language": "en",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Dear {{1}}, your maintenance payment for invoice {{2}} (Rs.{{3}}) is due TOMORROW. Please pay today to avoid a late fine.",
+      "example": {
+        "body_text": [["Vijay Bhai", "KIN-2026-0001", "720"]]
+      }
+    }
+  ]
+}
