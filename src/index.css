@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   /* Colors - Forest Green & Emerald Theme matching image.png */
   --primary: #0d5c34;
   --primary-hover: #083c22;
@@ -2547,7 +2547,7 @@ html, body {
     height: 100vh;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
     transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-    z-index: 200;
+    z-index: 1000;
   }
   .sidebar.open {
     left: 0;

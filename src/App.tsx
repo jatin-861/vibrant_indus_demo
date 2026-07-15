@@ -1460,7 +1460,7 @@ export default function App() {
           onClick={() => setIsMobileMenuOpen(false)}
           style={{
             position: 'fixed', inset: 0, backgroundColor: 'rgba(15,23,42,0.5)',
-            zIndex: 999, display: 'block'
+            zIndex: 990, display: 'block'
           }}
         />
       )}
