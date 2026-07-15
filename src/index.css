@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   /* Colors - Forest Green & Emerald Theme matching image.png */
   --primary: #0d5c34;
   --primary-hover: #083c22;
@@ -1934,7 +1934,7 @@ button, input, select, textarea {
   }
 }
 
-/* ── View Container (Reports, Audit Log) ── */
+/* â”€â”€ View Container (Reports, Audit Log) â”€â”€ */
 .view-container {
   display: flex;
   flex-direction: column;
@@ -1959,7 +1959,7 @@ button, input, select, textarea {
   margin: 0;
 }
 
-/* ── Stats Grid (Reports summary cards) ── */
+/* â”€â”€ Stats Grid (Reports summary cards) â”€â”€ */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1990,7 +1990,7 @@ button, input, select, textarea {
   letter-spacing: -0.5px;
 }
 
-/* ── Data Table (uniform table style for new views) ── */
+/* â”€â”€ Data Table (uniform table style for new views) â”€â”€ */
 .data-table {
   width: 100%;
   border-collapse: collapse;
@@ -2025,7 +2025,7 @@ button, input, select, textarea {
   background-color: #f8fafc;
 }
 
-/* ── Status Badges (inline pill badges used in tables) ── */
+/* â”€â”€ Status Badges (inline pill badges used in tables) â”€â”€ */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -2063,7 +2063,7 @@ button, input, select, textarea {
   color: #94a3b8;
 }
 
-/* ── Custom Select Dropdown Styling ── */
+/* â”€â”€ Custom Select Dropdown Styling â”€â”€ */
 .custom-select-wrapper {
   position: relative;
   width: 100%;
@@ -2174,7 +2174,7 @@ button, input, select, textarea {
   color: var(--text-secondary);
 }
 
-/* ── Premium Chart Redesign ── */
+/* â”€â”€ Premium Chart Redesign â”€â”€ */
 .premium-chart-container {
   position: relative;
   height: 200px;
@@ -2466,6 +2466,7 @@ button, input, select, textarea {
   border-color: #a7f3d0;
 }
 
+
 @keyframes tooltipFadeIn {
   to {
     opacity: 1;
@@ -2509,136 +2510,246 @@ button, input, select, textarea {
   z-index: 99;
 }
 
-/* Mobile responsiveness styles */
+/* ============================================================
+   GLOBAL OVERFLOW PROTECTION
+   ============================================================ */
+html, body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   TABLET (max 1024px)
+   ============================================================ */
+@media (max-width: 1024px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+  .sub-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ============================================================
+   MOBILE (max 768px)
+   ============================================================ */
 @media (max-width: 768px) {
-  /* Layout modifications */
   .sidebar {
     position: fixed;
     top: 0;
-    left: -280px;
+    left: -300px;
     bottom: 0;
     width: 280px;
     height: 100vh;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.15);
     transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 200;
   }
-  
   .sidebar.open {
     left: 0;
   }
-  
   .mobile-menu-toggle {
     display: flex !important;
   }
-  
   .sidebar-close-btn {
     display: flex !important;
   }
-  
   .main-header {
     padding: 0 16px;
-    height: 70px;
+    height: 60px;
   }
-  
+  .header-title h1 {
+    font-size: 16px;
+  }
+  .header-title p {
+    font-size: 11px;
+  }
   .view-canvas {
-    padding: 16px;
+    padding: 12px;
+    overflow-x: hidden;
   }
-
-  /* Grid layouts */
+  .card {
+    overflow: hidden;
+    max-width: 100%;
+  }
+  .card-header {
+    padding: 14px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-body {
+    padding: 14px 16px;
+  }
   .metrics-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
   }
-  
+  .metric-card {
+    padding: 14px;
+  }
+  .metric-value {
+    font-size: 20px;
+  }
   .sub-metrics-grid {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 12px;
+    gap: 10px;
   }
-  
   .quick-stats-grid {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px;
   }
-  
-  .shade-grid {
+  .dashboard-layout {
     grid-template-columns: 1fr;
     gap: 16px;
   }
-  
-  .form-row {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-
-  /* Modals */
-  .modal-overlay {
-    padding: 10px;
-  }
-  
-  .modal-content {
-    max-height: calc(100vh - 20px);
-  }
-  
-  .modal-body {
-    padding: 16px;
-  }
-  
-  .modal-footer {
-    padding: 12px 16px;
-  }
-
-  /* Hide non-critical columns on mobile tables to improve layout, making tables responsive */
-  .custom-table th:nth-child(4), 
-  .custom-table td:nth-child(4),
-  .custom-table th:nth-child(6), 
-  .custom-table td:nth-child(6),
-  .custom-table th:nth-child(7), 
-  .custom-table td:nth-child(7) {
-    display: none;
-  }
-
-  /* Toolbar buttons wrap */
-  .tools-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-  
-  .tools-actions {
-    justify-content: stretch;
-    width: 100%;
-  }
-
-  .tools-actions button,
-  .tools-actions label {
-    flex-grow: 1;
-    justify-content: center;
-  }
-  
-  .search-input-wrapper {
-    max-width: 100%;
-    width: 100%;
-  }
-
-  /* Dashboard layout two columns */
-  .dashboard-layout {
-    grid-template-columns: 1fr;
-    gap: 20px;
-  }
-  
   .dashboard-view .flex-between {
     flex-direction: column;
     align-items: flex-start;
-    gap: 16px;
+    gap: 12px;
   }
-
   .dashboard-view .flex-between > div:last-child {
     width: 100%;
     flex-wrap: wrap;
   }
+  .shade-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .shade-card {
+    padding: 14px;
+  }
+  .form-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+    max-width: 100%;
+  }
+  .custom-table {
+    min-width: 480px;
+  }
+  .custom-table th,
+  .custom-table td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+  .modal-overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+  .modal-content {
+    max-height: 92vh;
+    border-radius: 12px 12px 0 0;
+    width: 100%;
+    max-width: 100%;
+  }
+  .modal-content.large {
+    max-width: 100%;
+  }
+  .modal-body {
+    padding: 14px;
+  }
+  .modal-footer {
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .modal-footer .btn {
+    flex: 1;
+    justify-content: center;
+  }
+  .tools-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .tools-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    width: 100%;
+  }
+  .tools-actions .btn,
+  .tools-actions button,
+  .tools-actions label {
+    flex: 1 1 auto;
+    min-width: 110px;
+    justify-content: center;
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  .search-input-wrapper {
+    max-width: 100%;
+    width: 100%;
+  }
+  .settings-view {
+    max-width: 100% !important;
+    padding: 0;
+  }
+  .tools-bar h2 {
+    font-size: 18px;
+  }
 }
 
+/* ============================================================
+   SMALL MOBILE (max 480px)
+   ============================================================ */
 @media (max-width: 480px) {
+  .view-canvas {
+    padding: 10px;
+  }
+  .metrics-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
   .sub-metrics-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px;
+  }
+  .quick-stats-grid {
     grid-template-columns: 1fr !important;
+  }
+  .metric-card {
+    padding: 12px;
+  }
+  .metric-value {
+    font-size: 18px;
+  }
+  .card-header {
+    padding: 12px;
+  }
+  .card-body {
+    padding: 12px;
+  }
+  .tools-actions .btn,
+  .tools-actions button,
+  .tools-actions label {
+    min-width: calc(50% - 4px);
+    font-size: 11px;
+    padding: 7px 8px;
+  }
+  .modal-footer .btn {
+    min-width: 80px;
+    font-size: 12px;
+  }
+  .custom-table th,
+  .custom-table td {
+    padding: 8px 8px;
+    font-size: 11px;
+  }
+  .main-header {
+    height: 54px;
+  }
+  .header-title h1 {
+    font-size: 14px;
   }
 }

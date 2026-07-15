@@ -439,18 +439,7 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                         <Mail size={12} /> <span>{owner.email}</span>
                       </div>
-                      <div style={{ marginTop: '8px' }}>
-                        <button 
-                          className="btn btn-secondary btn-sm"
-                          style={{ color: '#25D366', borderColor: '#25D366', width: '100%', display: 'flex', justifyContent: 'center', gap: '6px' }}
-                          onClick={() => {
-                            const cleanPhone = owner.phone.replace(/[^\d]/g, '');
-                            window.open(`https://wa.me/${cleanPhone}`, '_blank');
-                          }}
-                        >
-                          <MessageSquare size={12} /> WhatsApp Owner
-                        </button>
-                      </div>
+
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', color: 'var(--text-muted)', fontSize: '13px', border: '1px dashed #cbd5e1', borderRadius: '6px' }}>
@@ -500,18 +489,7 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                         <Mail size={12} /> <span>{renter.email}</span>
                       </div>
-                      <div style={{ marginTop: '8px' }}>
-                        <button 
-                          className="btn btn-secondary btn-sm"
-                          style={{ color: '#25D366', borderColor: '#25D366', width: '100%', display: 'flex', justifyContent: 'center', gap: '6px' }}
-                          onClick={() => {
-                            const cleanPhone = renter.phone.replace(/[^\d]/g, '');
-                            window.open(`https://wa.me/${cleanPhone}`, '_blank');
-                          }}
-                        >
-                          <MessageSquare size={12} /> WhatsApp Tenant
-                        </button>
-                      </div>
+
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', color: 'var(--text-muted)', fontSize: '13px', border: '1px dashed #cbd5e1', borderRadius: '6px' }}>
