@@ -436,10 +436,8 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                           className="btn btn-secondary btn-sm"
                           style={{ color: '#25D366', borderColor: '#25D366', width: '100%', display: 'flex', justifyContent: 'center', gap: '6px' }}
                           onClick={() => {
-                            if (onSelectShadeForChat) {
-                              onSelectShadeForChat(owner.phone);
-                            }
-                            setActiveTab('simulator');
+                            const cleanPhone = owner.phone.replace(/[^\d]/g, '');
+                            window.open(`https://wa.me/${cleanPhone}`, '_blank');
                           }}
                         >
                           <MessageSquare size={12} /> WhatsApp Owner
@@ -497,10 +495,8 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                           className="btn btn-secondary btn-sm"
                           style={{ color: '#25D366', borderColor: '#25D366', width: '100%', display: 'flex', justifyContent: 'center', gap: '6px' }}
                           onClick={() => {
-                            if (onSelectShadeForChat) {
-                              onSelectShadeForChat(renter.phone);
-                            }
-                            setActiveTab('simulator');
+                            const cleanPhone = renter.phone.replace(/[^\d]/g, '');
+                            window.open(`https://wa.me/${cleanPhone}`, '_blank');
                           }}
                         >
                           <MessageSquare size={12} /> WhatsApp Tenant

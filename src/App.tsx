@@ -1340,7 +1340,7 @@ export default function App() {
               animation: 'pulseRing 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
             }} />
             <img
-              src="/vibrant_favicon.avif"
+              src="/vibrant_favicon.png"
               alt="Vibrant Industrial Park Logo"
               style={{
                 width: '72px',
