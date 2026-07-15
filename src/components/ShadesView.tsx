@@ -4,7 +4,6 @@ import {
   Upload,
   Search,
   Edit2,
-  Droplet,
   Maximize2,
   FileText,
   Crown,
@@ -16,17 +15,16 @@ import {
   Download
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import type { Shade, Owner, SystemSettings, Invoice, ShadeDocument } from '../types';
+import type { Shade, Owner, SystemSettings, ShadeDocument } from '../types';
 import { CustomDropdown } from './CustomDropdown';
 
 interface ShadesViewProps {
   shades: Shade[];
   owners: Owner[];
   settings?: SystemSettings;
-  invoices?: Invoice[];
-  onAddShade: (shade: Omit<Shade, 'currentWaterReading'>) => void;
+  onAddShade: (shade: Shade) => void;
   onUpdateShade: (shade: Shade) => void;
-  onBulkImportShades: (shades: Omit<Shade, 'currentWaterReading'>[]) => void;
+  onBulkImportShades: (shades: Shade[]) => void;
   onOpenOwnerTransferModal: (shadeId: string) => void;
   currentRole: 'Admin' | 'Secretary' | 'Treasurer';
   onSubmitRequest: (type: 'edit_shade' | 'update_settings' | 'reset_db', details: string, data: unknown) => void;
@@ -37,7 +35,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   shades,
   owners,
   settings,
-  invoices,
   onAddShade,
   onUpdateShade,
   onBulkImportShades,
@@ -62,7 +59,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   const [ownerId, setOwnerId] = useState<string>('');
   const [renterId, setRenterId] = useState<string>('');
   const [fixedMaintenance, setFixedMaintenance] = useState(settings?.defaultMaintenance || 700);
-  const [lastWaterReading, setLastWaterReading] = useState(0);
 
   // Sync default maintenance when settings change
   useEffect(() => {
@@ -72,10 +68,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   // Bulk import state
   const [importText, setImportText] = useState('');
   const [importError, setImportError] = useState('');
-
-  // Water reading updates
-  const [updatingWaterShade, setUpdatingWaterShade] = useState<Shade | null>(null);
-  const [newWaterVal, setNewWaterVal] = useState(0);
 
   const readFilesAsDocuments = (files: FileList): Promise<ShadeDocument[]> => {
     const today = new Date().toISOString().split('T')[0];
@@ -125,7 +117,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
       ownerId: ownerId || null,
       renterId: renterId || null,
       fixedMaintenance,
-      lastWaterReading,
       transferFeeTriggered: false,
       documents: newDocuments
     });
@@ -139,7 +130,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
     setOwnerId('');
     setRenterId('');
     setFixedMaintenance(settings?.defaultMaintenance || 700);
-    setLastWaterReading(0);
     setNewDocuments([]);
     setIsAddModalOpen(false);
   };
@@ -170,9 +160,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
       const original = shades.find(s => s.id === editingShade.id);
       const changesList: string[] = [];
       if (original) {
-        if (original.lastWaterReading !== editingShade.lastWaterReading) {
-          changesList.push(`Previous Water Reading: ${original.lastWaterReading} → ${editingShade.lastWaterReading}`);
-        }
         if (original.fixedMaintenance !== editingShade.fixedMaintenance) {
           changesList.push(`Maintenance Rate: ₹${original.fixedMaintenance} → ₹${editingShade.fixedMaintenance}`);
         }
@@ -198,9 +185,9 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = 'Shade ID,Block,Floor,Size (SqFt),Status,Maintenance Rate,Last Water Reading\n';
+    const headers = 'Shade ID,Block,Floor,Size (SqFt),Status,Maintenance Rate\n';
     const rows = shades.map(s =>
-      `"${s.id}","${s.block}","${s.floor}",${s.sqFt},"${s.status}",${s.fixedMaintenance},${s.lastWaterReading}`
+      `"${s.id}","${s.block}","${s.floor}",${s.sqFt},"${s.status}",${s.fixedMaintenance}`
     ).join('\n');
     
     const blob = new Blob([headers + rows], { type: 'text/csv;charset=utf-8;' });
@@ -248,7 +235,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
 
     try {
       const rows = importText.split('\n').map(row => row.trim()).filter(Boolean);
-      const parsedShades: Omit<Shade, 'currentWaterReading'>[] = [];
+      const parsedShades: Shade[] = [];
 
       const headerRow = rows[0].toLowerCase();
       const hasHeader = headerRow.includes('shade') || headerRow.includes('block') || headerRow.includes('floor') || headerRow.includes('id');
@@ -260,7 +247,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
       let sqFtIdx = 3;
       let statusIdx = 4;
       let maintIdx = 5;
-      let waterIdx = 6;
 
       if (hasHeader) {
         startIdx = 1;
@@ -273,7 +259,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
           else if (name.includes('size') || name.includes('sq')) sqFtIdx = idx;
           else if (name.includes('status')) statusIdx = idx;
           else if (name.includes('rate') || name.includes('maint')) maintIdx = idx;
-          else if (name.includes('reading') || name.includes('water')) waterIdx = idx;
         });
       }
 
@@ -294,7 +279,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
         const size = parseInt(cleanCols[sqFtIdx]) || 500;
         const occStatus = (cleanCols[statusIdx]?.toLowerCase() as 'vacant' | 'occupied' | 'maintenance') || 'vacant';
         const maintenanceRate = parseInt(cleanCols[maintIdx]) || 700;
-        const waterVal = parseInt(cleanCols[waterIdx]) || 0;
 
         parsedShades.push({
           id,
@@ -305,7 +289,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
           ownerId: null,
           renterId: null,
           fixedMaintenance: maintenanceRate,
-          lastWaterReading: waterVal,
           transferFeeTriggered: false
         });
       }
@@ -320,30 +303,13 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
     }
   };
 
-  const handleWaterSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!updatingWaterShade) return;
-
-    if (newWaterVal < updatingWaterShade.lastWaterReading) {
-      alert('Error: New water meter reading cannot be less than the previous reading.');
-      return;
-    }
-
-    onUpdateShade({
-      ...updatingWaterShade,
-      currentWaterReading: newWaterVal
-    });
-
-    setUpdatingWaterShade(null);
-  };
-
   const downloadSampleTemplate = () => {
-    const csvContent = "Shade ID,Block,Floor,Size (SqFt),Status,Maintenance Rate,Last Water Reading\n" +
-      "SH-001,Block A,Ground Floor,500,occupied,700,1050\n" +
-      "SH-002,Block A,First Floor,450,occupied,700,820\n" +
-      "SH-003,Block B,Ground Floor,600,vacant,700,0\n" +
-      "SH-004,Block B,First Floor,400,occupied,700,310\n" +
-      "SH-005,Block C,Ground Floor,550,maintenance,700,0";
+    const csvContent = "Shade ID,Block,Floor,Size (SqFt),Status,Maintenance Rate\n" +
+      "SH-001,Block A,Ground Floor,500,occupied,700\n" +
+      "SH-002,Block A,First Floor,450,occupied,700\n" +
+      "SH-003,Block B,Ground Floor,600,vacant,700\n" +
+      "SH-004,Block B,First Floor,400,occupied,700\n" +
+      "SH-005,Block C,Ground Floor,550,maintenance,700";
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -424,17 +390,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   </div>
                 )}
 
-                <div className="shade-info-row">
-                  <Droplet size={14} style={{ color: 'var(--color-info)' }} />
-                  <span>
-                    Water Reading: <strong>{s.lastWaterReading} units</strong>
-                    {s.currentWaterReading > s.lastWaterReading && (
-                      <span className="text-success" style={{ marginLeft: '6px' }}>
-                        (Next: {s.currentWaterReading})
-                      </span>
-                    )}
-                  </span>
-                </div>
+
 
                 {s.transferFeeTriggered && (
                   <div className="shade-info-row" style={{ color: 'var(--color-danger)', fontWeight: '600', fontSize: '11px', marginTop: '4px' }}>
@@ -445,13 +401,8 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
 
               <div className="shade-card-footer" style={{ display: 'block' }}>
                 <div className="shade-rate" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <span className="shade-rate-label">Maintenance</span>
                   <span className="shade-rate-val">
-                    {s.currentWaterReading > s.lastWaterReading && settings ? (
-                      <>₹{settings.defaultMaintenance} + ₹{(s.currentWaterReading - s.lastWaterReading) * (settings.waterRate || 30)}<span style={{ fontSize: '10px', color: 'var(--text-secondary)', marginLeft: '4px' }}>(water)</span></>
-                    ) : (
-                      <>₹{settings?.defaultMaintenance || s.fixedMaintenance}</>
-                    )}
+                    <>₹{settings?.defaultMaintenance || s.fixedMaintenance}</>
                   </span>
                 </div>
 
@@ -464,19 +415,6 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                       style={{ backgroundColor: 'var(--primary)', borderColor: 'var(--primary)', justifyContent: 'center' }}
                     >
                       <FileText size={12} /> Bill
-                    </button>
-                  )}
-                  {s.status === 'occupied' && (
-                    <button
-                      className="btn btn-secondary btn-sm"
-                      title="Log water meter reading"
-                      onClick={() => {
-                        setUpdatingWaterShade(s);
-                        setNewWaterVal(s.currentWaterReading || s.lastWaterReading);
-                      }}
-                      style={{ justifyContent: 'center' }}
-                    >
-                      <Droplet size={12} /> Meter
                     </button>
                   )}
                   {s.status === 'occupied' && (
@@ -623,28 +561,15 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   </>
                 )}
 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>2-Month Maintenance Rate (₹)*</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={fixedMaintenance}
-                      onChange={(e) => setFixedMaintenance(parseInt(e.target.value) || 0)}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Initial Water Reading (Units)*</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={lastWaterReading}
-                      onChange={(e) => setLastWaterReading(parseInt(e.target.value) || 0)}
-                      required
-                    />
-                  </div>
+                <div className="form-group">
+                  <label>Yearly Maintenance Rate (₹)*</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={fixedMaintenance}
+                    onChange={(e) => setFixedMaintenance(parseInt(e.target.value) || 0)}
+                    required
+                  />
                 </div>
 
                 <div className="form-group">
@@ -717,19 +642,11 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   <strong>{getOwnerName(viewingShade.renterId)}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>2-Month Maintenance Rate</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>Yearly Maintenance Rate</span>
                   <strong>₹{viewingShade.fixedMaintenance}</strong>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Last Water Reading</span>
-                  <strong>{viewingShade.lastWaterReading} units</strong>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border-color)' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Late Fines</span>
-                  <strong style={{ color: viewingShade.penaltyDisabled ? 'var(--color-pending)' : 'inherit' }}>
-                    {viewingShade.penaltyDisabled ? `Paused${viewingShade.penaltyDisabledReason ? ' — ' + viewingShade.penaltyDisabledReason : ''}` : 'Active'}
-                  </strong>
-                </div>
+
+
                 {viewingShade.transferFeeTriggered && (
                   <div style={{ color: 'var(--color-danger)', fontWeight: '600', fontSize: '11px' }}>
                     ⚠️ One-time Transfer Fee (₹2,500) pending in next bill
@@ -879,35 +796,18 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   </>
                 )}
 
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>2-Month Maintenance Rate (₹)</label>
-                    <input 
-                      type="number" 
-                      className="form-control"
-                      value={editingShade.fixedMaintenance}
-                      onChange={(e) => setEditingShade({ ...editingShade, fixedMaintenance: parseInt(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Last Water Reading (Units)</label>
-                    <input 
-                      type="number" 
-                      className="form-control"
-                      value={editingShade.lastWaterReading}
-                      onChange={(e) => setEditingShade({ ...editingShade, lastWaterReading: parseInt(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
+                <div className="form-group">
+                  <label>Yearly Maintenance Rate (₹)</label>
+                  <input 
+                    type="number" 
+                    className="form-control"
+                    value={editingShade.fixedMaintenance}
+                    onChange={(e) => setEditingShade({ ...editingShade, fixedMaintenance: parseInt(e.target.value) || 0 })}
+                    required
+                  />
                 </div>
 
-                {editingShade.penaltyDisabled && (
-                  <div style={{ marginTop: '8px', padding: '10px 14px', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '12px', color: '#92400e' }}>
-                    Late fines are paused for this shade{editingShade.penaltyDisabledReason ? ` — ${editingShade.penaltyDisabledReason}` : ''}. Manage this from the Fines module.
-                  </div>
-                )}
+
 
                 <div className="form-group" style={{ marginTop: '8px' }}>
                   <label>Attach Documents (PDF or Image)</label>
@@ -941,46 +841,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   )}
                 </div>
 
-                {/* Water Reading History from past invoices */}
-                {invoices && (() => {
-                  const shadeInvoices = invoices
-                    .filter(inv => inv.shadeId === editingShade.id && (inv.oldWaterReading > 0 || inv.newWaterReading > 0))
-                    .sort((a, b) => b.generatedDate.localeCompare(a.generatedDate));
-                  if (shadeInvoices.length === 0) return null;
-                  return (
-                    <div style={{ marginTop: '8px' }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: '700', color: 'var(--primary)', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', marginBottom: '10px' }}>
-                        Water Meter History
-                      </h4>
-                      <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
-                        <table style={{ width: '100%', fontSize: '11px', borderCollapse: 'collapse' }}>
-                          <thead>
-                            <tr style={{ backgroundColor: '#f8fafc' }}>
-                              <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Invoice</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid var(--border-color)' }}>Old</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid var(--border-color)' }}>New</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid var(--border-color)' }}>Usage</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'right', borderBottom: '1px solid var(--border-color)' }}>Charge</th>
-                              <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '1px solid var(--border-color)' }}>Date</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {shadeInvoices.map(inv => (
-                              <tr key={inv.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                <td style={{ padding: '5px 10px', fontWeight: '600' }}>{inv.id}</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'right' }}>{inv.oldWaterReading}</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'right' }}>{inv.newWaterReading}</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'right', fontWeight: '600' }}>{inv.newWaterReading - inv.oldWaterReading}</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'right', color: 'var(--primary)' }}>₹{inv.waterUsageCharge}</td>
-                                <td style={{ padding: '5px 10px', fontSize: '10px', color: 'var(--text-secondary)' }}>{inv.generatedDate}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  );
-                })()}
+
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-secondary" onClick={() => setEditingShade(null)}>Cancel</button>
@@ -1008,7 +869,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                     Paste columns directly from an Excel spreadsheet or a CSV file. Each row should contain a single shade entry.
                   </p>
                   <p style={{ fontWeight: '600', color: 'var(--text-primary)' }}>
-                    Columns structure: <code>Shade ID, Block, Floor, Size, [Status], [MaintenanceRate], [WaterReading]</code>
+                    Columns structure: <code>Shade ID, Block, Floor, Size, [Status], [MaintenanceRate]</code>
                   </p>
                   <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={downloadSampleTemplate}>
@@ -1035,7 +896,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                   <label>Paste Spreadsheet Data (CSV or Tab-Delimited)</label>
                   <textarea 
                     className="csv-textarea"
-                    placeholder="SH-101,Block A,Ground Floor,500,occupied,700,420,true&#10;SH-102,Block A,First Floor,450,occupied,700,1200,true&#10;SH-103,Block B,Ground Floor,600,vacant,700,0,false"
+                    placeholder="SH-101,Block A,Ground Floor,500,occupied,700&#10;SH-102,Block A,First Floor,450,occupied,700&#10;SH-103,Block B,Ground Floor,600,vacant,700"
                     value={importText}
                     onChange={(e) => setImportText(e.target.value)}
                   />
@@ -1047,7 +908,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                 </div>
 
                 <div style={{ padding: '12px', backgroundColor: 'var(--color-info-bg)', border: '1px solid var(--primary-light)', borderRadius: 'var(--radius-md)', fontSize: '12px', color: 'var(--primary)' }}>
-                  <strong>💡 Tip:</strong> Status can be: <code>vacant</code>, <code>occupied</code>, or <code>maintenance</code>. Water supply default is <strong>true</strong>.
+                  <strong>💡 Tip:</strong> Status can be: <code>vacant</code>, <code>occupied</code>, or <code>maintenance</code>.
                 </div>
               </div>
               <div className="modal-footer">
@@ -1059,43 +920,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
         </div>
       )}
 
-      {/* MODAL 4: Water Meter Input */}
-      {updatingWaterShade && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h3>Log Water Reading for {updatingWaterShade.id}</h3>
-              <button className="modal-close" onClick={() => setUpdatingWaterShade(null)}>×</button>
-            </div>
-            <form onSubmit={handleWaterSubmit}>
-              <div className="modal-body">
-                <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--color-info-bg)', borderRadius: 'var(--radius-md)', fontSize: '13px' }}>
-                  Previous logged reading: <strong>{updatingWaterShade.lastWaterReading} units</strong>
-                </div>
 
-                <div className="form-group">
-                  <label>Current Water Reading (New Meter Reading)*</label>
-                  <input 
-                    type="number"
-                    className="form-control"
-                    value={newWaterVal}
-                    onChange={(e) => setNewWaterVal(parseInt(e.target.value) || 0)}
-                    min={updatingWaterShade.lastWaterReading}
-                    required
-                  />
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>
-                    Calculated consumption: <strong>{Math.max(0, newWaterVal - updatingWaterShade.lastWaterReading)} units</strong>. Total water billing: <strong>₹{Math.max(0, newWaterVal - updatingWaterShade.lastWaterReading) * (settings?.waterRate || 30)}</strong> (at ₹{settings?.waterRate || 30}/unit).
-                  </span>
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setUpdatingWaterShade(null)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Reading</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

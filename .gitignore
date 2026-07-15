@@ -25,4 +25,5 @@ dist-ssr
 
 # Environment variables
 .env
+supabase/functions/.env
 

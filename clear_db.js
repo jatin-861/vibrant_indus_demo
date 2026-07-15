@@ -12,10 +12,6 @@ async function run() {
     if (payErr) console.error('Payments clear error:', payErr);
     else console.log('✓ Cleared payments');
 
-    const { error: fineErr } = await supabase.from('fines').delete().neq('id', 'dummy');
-    if (fineErr) console.error('Fines clear error:', fineErr);
-    else console.log('✓ Cleared fines');
-
     const { error: msgErr } = await supabase.from('whatsapp_messages').delete().neq('id', 'dummy');
     if (msgErr) console.error('Messages clear error:', msgErr);
     else console.log('✓ Cleared whatsapp_messages');
@@ -40,10 +36,7 @@ async function run() {
     const INITIAL_SETTINGS = {
       id: 1,
       default_maintenance: 0,
-      water_rate: 0,
       transfer_fee: 0,
-      grace_period_days: 0,
-      fine_per_day: 0,
       upi_id: '',
       qr_image_url: '',
       society_name: '',

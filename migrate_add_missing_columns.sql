@@ -3,12 +3,6 @@
 -- Run this in Supabase Dashboard > SQL Editor
 -- ============================================
 
--- 1. Add penalty_disabled column to shades table
-ALTER TABLE shades ADD COLUMN IF NOT EXISTS penalty_disabled BOOLEAN NOT NULL DEFAULT FALSE;
-
--- 1a. Add penalty_disabled_reason column to shades table (why fines were paused, e.g. financial hardship)
-ALTER TABLE shades ADD COLUMN IF NOT EXISTS penalty_disabled_reason TEXT;
-
 -- 1b. Add documents column to shades table (JSON array of attached PDFs/images)
 ALTER TABLE shades ADD COLUMN IF NOT EXISTS documents TEXT NOT NULL DEFAULT '[]';
 
@@ -33,7 +27,6 @@ ALTER TABLE owners DISABLE ROW LEVEL SECURITY;
 ALTER TABLE shades DISABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
 ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
-ALTER TABLE fines DISABLE ROW LEVEL SECURITY;
 ALTER TABLE whatsapp_messages DISABLE ROW LEVEL SECURITY;
 ALTER TABLE change_requests DISABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs DISABLE ROW LEVEL SECURITY;

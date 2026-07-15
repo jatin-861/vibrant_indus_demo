@@ -12,12 +12,11 @@ import {
   Plus,
   CalendarDays
 } from 'lucide-react';
-import type { Shade, Invoice, SystemSettings, FineRecord } from '../types';
+import type { Shade, Invoice, SystemSettings } from '../types';
 
 interface DashboardViewProps {
   shades: Shade[];
   invoices: Invoice[];
-  fines: FineRecord[];
   currentDate: string;
   settings?: SystemSettings;
   setActiveTab: (tab: string) => void;
@@ -26,7 +25,6 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   shades,
   invoices,
-  fines,
   currentDate,
   settings,
   setActiveTab
@@ -62,7 +60,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     new Set([...invoices.map(inv => parseInt(inv.generatedDate.slice(0, 4), 10)), selectedYear])
   ).filter(y => !isNaN(y)).sort((a, b) => b - a);
 
-  // Invoices/fines scoped to the admin's selected analytics range (year / 6mo / 1yr / total)
+  // Invoices scoped to the admin's selected analytics range (year / 6mo / 1yr / total)
   const filteredInvoices = (() => {
     if (rangeMode === 'year') return activeInvoices.filter(inv => inv.generatedDate.startsWith(String(selectedYear)));
     if (rangeMode === 'total') return activeInvoices;
@@ -71,16 +69,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     start.setMonth(start.getMonth() - months);
     const startStr = start.toISOString().split('T')[0];
     return activeInvoices.filter(inv => inv.generatedDate >= startStr && inv.generatedDate <= currentDate);
-  })();
-
-  const filteredFines = (() => {
-    if (rangeMode === 'year') return fines.filter(f => f.date.startsWith(String(selectedYear)));
-    if (rangeMode === 'total') return fines;
-    const months = rangeMode === '6m' ? 6 : 12;
-    const start = new Date(currentDate);
-    start.setMonth(start.getMonth() - months);
-    const startStr = start.toISOString().split('T')[0];
-    return fines.filter(f => f.date >= startStr && f.date <= currentDate);
   })();
 
   const totalBilled = filteredInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
@@ -92,9 +80,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const pendingAmount = filteredInvoices
     .filter(inv => inv.status === 'sent' || inv.status === 'overdue' || inv.status === 'draft')
     .reduce((sum, inv) => sum + inv.totalAmount, 0);
-
-  const unpaidFinesTotal = filteredFines.filter(f => f.status === 'unpaid').reduce((sum, f) => sum + f.amount, 0);
-  const unpaidFinesCount = filteredFines.filter(f => f.status === 'unpaid').length;
 
   // Always all-time/current — this is an actionable operational alert, not a historical metric
   const overdueInvoices = activeInvoices.filter(inv => inv.status === 'overdue');
@@ -170,7 +155,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <AlertTriangle size={20} />
             <span className="alert-tag">Overdue</span>
             <span>
-              <strong>{overdueInvoices.length} Overdue Invoice{overdueInvoices.length > 1 ? 's' : ''}</strong> totaling {formatCurrency(overdueAmount)} detected. Auto-fines of ₹{settings?.finePerDay ?? 100}/day are currently active.
+              <strong>{overdueInvoices.length} Overdue Invoice{overdueInvoices.length > 1 ? 's' : ''}</strong> totaling {formatCurrency(overdueAmount)} detected.
             </span>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={() => setActiveTab('invoices')}>
@@ -281,16 +266,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Card 4: Standard White Card */}
         <div className="metric-card metric-standard">
           <div className="metric-header">
-            <span className="metric-title">Overdue Fines</span>
-            <div className="metric-icon-box" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('fines')}>
+            <span className="metric-title">Overdue Invoices</span>
+            <div className="metric-icon-box" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('invoices')}>
               <ArrowUpRight size={20} />
             </div>
           </div>
-          <div className="metric-value" style={{ color: 'var(--color-danger)' }}>{formatCurrency(unpaidFinesTotal)}</div>
+          <div className="metric-value" style={{ color: 'var(--color-danger)' }}>{formatCurrency(rangeOverdueAmount)}</div>
           <div className="metric-trend" style={{ backgroundColor: '#fff5f5', padding: '2px 8px', borderRadius: '12px', display: 'inline-flex', alignSelf: 'flex-start' }}>
             <AlertCircle size={12} style={{ color: '#b91c1c' }} />
             <span style={{ fontSize: '11px', color: '#b91c1c', fontWeight: '600', marginLeft: '4px' }}>
-              {unpaidFinesCount > 0 ? `${unpaidFinesCount} pending collection` : 'Late penalty policy active'}
+              {rangeOverdueInvoices.length > 0 ? `${rangeOverdueInvoices.length} invoices overdue` : 'No overdue invoices'}
             </span>
           </div>
         </div>

@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Search,
   Trash2,
   CheckSquare,
   Plus,
-  MessageSquare,
   Printer,
   Edit2,
   FileText,
@@ -24,14 +23,12 @@ interface InvoicesViewProps {
   onGenerateSingleInvoice: (
     shadeId: string, 
     dueDate: string,
-    newWaterReading: number,
     otherName: string,
     otherCharge: number,
     billingMonths: number
   ) => void;
   onUpdateInvoiceStatus: (invoiceId: string, status: Invoice['status'], paymentMethod?: Invoice['paymentMethod'], details?: string) => void;
   onDeleteInvoice: (invoiceId: string) => void;
-  onSendWhatsApp: (invoiceId: string) => void;
   onUpdateInvoice: (oldId: string, updatedInvoice: Invoice) => void;
   preselectedShadeId?: string | null;
   clearPreselectedShadeId?: () => void;
@@ -47,7 +44,6 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   onGenerateSingleInvoice,
   onUpdateInvoiceStatus,
   onDeleteInvoice,
-  onSendWhatsApp,
   onUpdateInvoice,
   preselectedShadeId,
   clearPreselectedShadeId,
@@ -76,20 +72,11 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   const [selectedShadeId, setSelectedShadeId] = useState('');
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() + settings.gracePeriodDays);
+    d.setDate(d.getDate() + 15);
     return d.toISOString().split('T')[0];
   });
-
-  // Re-sync default due date when grace period setting changes
-  useEffect(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + settings.gracePeriodDays);
-    setDueDate(d.toISOString().split('T')[0]);
-  }, [settings.gracePeriodDays]);
-  const [newWaterReading, setNewWaterReading] = useState<number>(0);
   const [otherName, setOtherName] = useState('');
   const [otherCharge, setOtherCharge] = useState<number>(0);
-  const [billingMonths, setBillingMonths] = useState<number>(2);
   
   // Payment states
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'cheque' | 'online' | 'bank_transfer'>('cash');
@@ -97,14 +84,6 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
   const handleShadeChange = (sId: string) => {
     setSelectedShadeId(sId);
-    if (!sId) {
-      setNewWaterReading(0);
-      return;
-    }
-    const shade = shades.find(s => s.id === sId);
-    if (shade) {
-      setNewWaterReading(shade.currentWaterReading || shade.lastWaterReading);
-    }
   };
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -147,18 +126,15 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     onGenerateSingleInvoice(
       selectedShadeId, 
       dueDate, 
-      newWaterReading, 
       otherName, 
       otherCharge, 
-      billingMonths
+      12
     );
     
     // Reset Form
     setSelectedShadeId('');
-    setNewWaterReading(0);
     setOtherName('');
     setOtherCharge(0);
-    setBillingMonths(2);
     setIsSingleGenOpen(false);
   };
 
@@ -189,18 +165,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     e.preventDefault();
     if (!editingInvoice) return;
 
-    // Recalculate water usage charge just in case reading values changed
-    const oldWater = editingInvoice.oldWaterReading;
-    const newWater = editingInvoice.newWaterReading;
-    const waterUnits = newWater - oldWater;
-    const waterCost = waterUnits > 0 ? waterUnits * settings.waterRate : 0;
-
-    const updatedInvoiceWithWaterCost = {
-      ...editingInvoice,
-      waterUsageCharge: waterCost
-    };
-
-    onUpdateInvoice(originalInvoiceId, updatedInvoiceWithWaterCost);
+    onUpdateInvoice(originalInvoiceId, editingInvoice);
     setEditingInvoice(null);
   };
 
@@ -236,11 +201,9 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
       'Owner': i.ownerName,
       'Renter': i.renterName || '',
       'Maintenance (₹)': i.maintenanceFee,
-      'Water Charge (₹)': i.waterUsageCharge,
       'Other Charge (₹)': i.otherMaintenanceCharge,
       'Other Charge Name': i.otherMaintenanceName || '',
       'Transfer Fee (₹)': i.transferFee,
-      'Fine (₹)': i.fineAmount,
       'Total (₹)': i.totalAmount,
       'Generated Date': i.generatedDate,
       'Due Date': i.dueDate,
@@ -252,8 +215,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
     const ws = XLSX.utils.json_to_sheet(data);
     ws['!cols'] = [
       { wch: 16 }, { wch: 10 }, { wch: 20 }, { wch: 20 },
-      { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 18 },
-      { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 18 },
+      { wch: 12 }, { wch: 12 }, { wch: 14 },
       { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 14 }
     ];
     const wb = XLSX.utils.book_new();
@@ -291,20 +254,16 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
           renterName: cols[3] || renter?.name || null,
           renterPhone: renter?.phone || null,
           maintenanceFee: parseFloat(cols[4]) || 0,
-          waterUsageCharge: parseFloat(cols[5]) || 0,
-          oldWaterReading: 0,
-          newWaterReading: 0,
-          otherMaintenanceCharge: parseFloat(cols[6]) || 0,
-          otherMaintenanceName: cols[7] || '',
-          transferFee: parseFloat(cols[8]) || 0,
-          fineAmount: parseFloat(cols[9]) || 0,
-          totalAmount: parseFloat(cols[10]) || 0,
-          generatedDate: cols[11] || '',
-          dueDate: cols[12] || '',
-          status: (cols[13] as Invoice['status']) || 'draft',
-          paymentMethod: (cols[14] as Invoice['paymentMethod']) || null,
-          paymentDate: cols[15] || null,
-          billingMonths: 2,
+          otherMaintenanceCharge: parseFloat(cols[5]) || 0,
+          otherMaintenanceName: cols[6] || '',
+          transferFee: parseFloat(cols[7]) || 0,
+          totalAmount: parseFloat(cols[8]) || 0,
+          generatedDate: cols[9] || '',
+          dueDate: cols[10] || '',
+          status: (cols[11] as Invoice['status']) || 'draft',
+          paymentMethod: (cols[12] as Invoice['paymentMethod']) || null,
+          paymentDate: cols[13] || null,
+          billingMonths: 12,
         });
       }
       return newInvoices;
@@ -343,13 +302,9 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   const previewOwner = previewShade ? owners.find(o => o.id === previewShade.ownerId) : null;
   const previewRenter = previewShade && previewShade.renterId ? owners.find(o => o.id === previewShade.renterId) : null;
   
-  const previewOldWater = previewShade ? previewShade.lastWaterReading : 0;
-  const previewWaterUnits = Math.max(0, newWaterReading - previewOldWater);
-  const previewWaterCharge = previewWaterUnits * settings.waterRate;
-  
-  const previewFixedMaintenance = previewShade ? Math.round((settings.defaultMaintenance / 2) * billingMonths) : 0;
+  const previewFixedMaintenance = previewShade ? settings.defaultMaintenance : 0;
   const previewTransferFee = previewShade && previewShade.transferFeeTriggered ? settings.transferFee : 0;
-  const previewTotal = previewFixedMaintenance + previewWaterCharge + otherCharge + previewTransferFee;
+  const previewTotal = previewFixedMaintenance + otherCharge + previewTransferFee;
   const paymentMethodOptions = [
     { value: 'cash', label: '💵 Cash', subLabel: 'Collected at Office' },
     { value: 'cheque', label: '✍️ Cheque', subLabel: 'Deposit Details' },
@@ -414,7 +369,6 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
               <th>TENANT / MEMBER</th>
               <th>SHADE</th>
               <th>MAINTENANCE</th>
-              <th>LATE FINE</th>
               <th>TOTAL DUE</th>
               <th>GENERATED</th>
               <th>DUE DATE</th>
@@ -425,7 +379,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
           <tbody>
             {filteredInvoices.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
                   No invoices found matching the search criteria.
                 </td>
               </tr>
@@ -446,7 +400,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                 <React.Fragment key={group.year}>
                   {/* Year header / divider row */}
                   <tr>
-                    <td colSpan={10} style={{ padding: 0, border: 'none', backgroundColor: 'var(--bg-main)' }}>
+                    <td colSpan={9} style={{ padding: 0, border: 'none', backgroundColor: 'var(--bg-main)' }}>
                       {groupIdx === 0 ? (
                         <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: '6px', padding: '2px 10px', fontSize: '12px', fontWeight: '800' }}>{group.year}</span>
@@ -464,7 +418,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                     </td>
                   </tr>
                   {group.invoices.map(inv => {
-                    const combinedMaintenance = inv.maintenanceFee + inv.waterUsageCharge + inv.otherMaintenanceCharge + inv.transferFee;
+                    const combinedMaintenance = inv.maintenanceFee + inv.otherMaintenanceCharge + inv.transferFee;
                     const tenantDisplay = inv.renterName || inv.ownerName;
                     return (
                       <tr key={inv.id}>
@@ -482,20 +436,11 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         <td><strong>{inv.shadeId}</strong></td>
                         <td>
                           {combinedMaintenance > 0 ? (
-                            <span title={`Base: ${inv.maintenanceFee}, Water: ${inv.waterUsageCharge}, Other: ${inv.otherMaintenanceCharge}, Transfer: ${inv.transferFee}`}>
+                            <span title={`Base: ${inv.maintenanceFee}, Other: ${inv.otherMaintenanceCharge}, Transfer: ${inv.transferFee}`}>
                               {formatCurrency(combinedMaintenance)}
                             </span>
                           ) : (
                             <span style={{ color: 'var(--text-muted)' }}>₹0</span>
-                          )}
-                        </td>
-                        <td>
-                          {inv.fineAmount > 0 ? (
-                            <span className="text-danger" style={{ fontWeight: '600' }}>
-                              {formatCurrency(inv.fineAmount)}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-muted)' }}>—</span>
                           )}
                         </td>
                         <td><strong>{formatCurrency(inv.totalAmount)}</strong></td>
@@ -516,16 +461,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                                 <CheckSquare size={12} /> Paid
                               </button>
                             )}
-                            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
-                              <button
-                                className="btn btn-secondary btn-sm"
-                                title="Dispatch WhatsApp Invoice & QR Link"
-                                onClick={() => onSendWhatsApp(inv.id)}
-                                style={{ color: '#075e54', borderColor: '#075e54', padding: '4px 8px' }}
-                              >
-                                <MessageSquare size={12} /> Send
-                              </button>
-                            )}
+
                             <button
                               className="btn btn-secondary btn-sm"
                               title="Print / View Invoice Details"
@@ -715,32 +651,15 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
 
                   {selectedShadeId && (
                     <>
-                      <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
-                        <div className="form-group" style={{ flex: 1 }}>
-                          <label>Old Water Reading (Units)</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            readOnly
-                            value={previewOldWater}
-                          />
-                        </div>
-
-                        <div className="form-group" style={{ flex: 1 }}>
-                          <label>New Water Reading (Units)*</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            required
-                            min={previewOldWater}
-                            value={newWaterReading}
-                            onChange={(e) => setNewWaterReading(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                      </div>
-
-                      <div style={{ padding: '8px 12px', backgroundColor: 'var(--color-info-bg)', border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '6px', fontSize: '12px', color: 'var(--color-info)', fontWeight: '500', marginBottom: '12px' }}>
-                        Consumption: <strong>{previewWaterUnits} units</strong> × ₹{settings.waterRate}/unit = <strong>₹{previewWaterCharge}</strong>
+                      <div className="form-group">
+                        <label>Due Date*</label>
+                        <input 
+                          type="date"
+                          className="form-control"
+                          required
+                          value={dueDate}
+                          onChange={(e) => setDueDate(e.target.value)}
+                        />
                       </div>
 
                       <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
@@ -762,37 +681,6 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                             className="form-control"
                             value={otherCharge || ''}
                             onChange={(e) => setOtherCharge(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
-                        <div className="form-group" style={{ flex: 1 }}>
-                          <label>Billing Period*</label>
-                          <CustomDropdown
-                            options={[
-                              { value: '1', label: '1 Month' },
-                              { value: '2', label: '2 Months (Default)' },
-                              { value: '3', label: '3 Months' },
-                              { value: '4', label: '4 Months' },
-                              { value: '6', label: '6 Months' },
-                              { value: '12', label: '1 Year' }
-                            ]}
-                            selectedValue={String(billingMonths)}
-                            onChange={(val) => setBillingMonths(parseInt(val) || 2)}
-                            placeholder="Select period"
-                            required
-                          />
-                        </div>
-
-                        <div className="form-group" style={{ flex: 1 }}>
-                          <label>Due Date*</label>
-                          <input 
-                            type="date"
-                            className="form-control"
-                            required
-                            value={dueDate}
-                            onChange={(e) => setDueDate(e.target.value)}
                           />
                         </div>
                       </div>
@@ -835,14 +723,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderBottom: '1px dashed #cbd5e1', paddingBottom: '10px', marginBottom: '10px' }}>
                         {previewFixedMaintenance > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Maintenance Fee ({billingMonths} month(s)):</span>
+                            <span>Maintenance Fee (1 Year):</span>
                             <strong>{formatCurrency(previewFixedMaintenance)}</strong>
-                          </div>
-                        )}
-                        {previewWaterCharge > 0 && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span>Water Charge ({previewWaterUnits} units × ₹{settings.waterRate}):</span>
-                            <strong>{formatCurrency(previewWaterCharge)}</strong>
                           </div>
                         )}
                         {otherCharge > 0 && (
@@ -1021,28 +903,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   </div>
                 </div>
 
-                <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label>Old Water Reading*</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={editingInvoice.oldWaterReading}
-                      onChange={(e) => setEditingInvoice({ ...editingInvoice, oldWaterReading: parseInt(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label>New Water Reading*</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={editingInvoice.newWaterReading}
-                      onChange={(e) => setEditingInvoice({ ...editingInvoice, newWaterReading: parseInt(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                </div>
+
 
                 <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
                   <div className="form-group" style={{ flex: 1 }}>
@@ -1065,25 +926,14 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   </div>
                 </div>
 
-                <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label>Transfer Fee (₹)</label>
-                    <input 
-                      type="number" 
-                      className="form-control"
-                      value={editingInvoice.transferFee}
-                      onChange={(e) => setEditingInvoice({ ...editingInvoice, transferFee: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label>Late Penalty fine (₹)</label>
-                    <input 
-                      type="number" 
-                      className="form-control"
-                      value={editingInvoice.fineAmount}
-                      onChange={(e) => setEditingInvoice({ ...editingInvoice, fineAmount: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
+                <div className="form-group">
+                  <label>Transfer Fee (₹)</label>
+                  <input 
+                    type="number" 
+                    className="form-control"
+                    value={editingInvoice.transferFee}
+                    onChange={(e) => setEditingInvoice({ ...editingInvoice, transferFee: parseInt(e.target.value) || 0 })}
+                  />
                 </div>
 
                 <h4 style={{ margin: '12px 0 0 0', fontSize: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '6px', color: 'var(--primary)' }}>Billing Schedule & Status</h4>
@@ -1110,17 +960,6 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   </div>
                 </div>
 
-                <div className="form-row" style={{ display: 'flex', gap: '16px' }}>
-                  <div className="form-group" style={{ flex: 1 }}>
-                    <label>Billing Months*</label>
-                    <input 
-                      type="number" 
-                      className="form-control"
-                      value={editingInvoice.billingMonths}
-                      onChange={(e) => setEditingInvoice({ ...editingInvoice, billingMonths: parseInt(e.target.value) || 2 })}
-                      required
-                    />
-                  </div>
                   <div className="form-group" style={{ flex: 1 }}>
                     <label>Invoice Status*</label>
                     <select 
@@ -1136,7 +975,6 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
-                </div>
 
                 {editingInvoice.status === 'paid' && (
                   <div style={{ padding: '12px', border: '1px solid #10b981', borderRadius: '8px', backgroundColor: 'rgba(16, 185, 129, 0.05)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -1261,30 +1099,13 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         <td style={{ padding: '10px 8px' }}>
                           <strong>Fixed Infrastructure Maintenance</strong><br />
                           <span style={{ fontSize: '10px', color: '#64748b' }}>
-                            Common area facilities fee — ₹{Math.round(viewingInvoice.maintenanceFee / viewingInvoice.billingMonths)}/month
+                            Common area facilities fee — 1 Year Fixed Rate
                           </span>
                         </td>
                         <td style={{ padding: '10px 8px', textAlign: 'right', color: '#64748b' }}>
-                          {viewingInvoice.billingMonths} mo × ₹{Math.round(viewingInvoice.maintenanceFee / viewingInvoice.billingMonths)}
+                          1 Year
                         </td>
                         <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(viewingInvoice.maintenanceFee)}</td>
-                      </tr>
-                    )}
-
-                    {/* 3. Water Meter Charge */}
-                    {viewingInvoice.newWaterReading > viewingInvoice.oldWaterReading && (
-                      <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '10px 8px' }}>
-                          <strong>Water Meter Supply Charge</strong><br />
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>
-                            Meter reading: {viewingInvoice.oldWaterReading} → {viewingInvoice.newWaterReading} units
-                            ({viewingInvoice.newWaterReading - viewingInvoice.oldWaterReading} units consumed)
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', color: '#64748b' }}>
-                          {viewingInvoice.newWaterReading - viewingInvoice.oldWaterReading} units × ₹{settings.waterRate}
-                        </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '600' }}>{formatCurrency(viewingInvoice.waterUsageCharge)}</td>
                       </tr>
                     )}
 
@@ -1312,17 +1133,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                       </tr>
                     )}
 
-                    {/* 6. Late Penalty fine */}
-                    {viewingInvoice.fineAmount > 0 && (
-                      <tr style={{ borderBottom: '1px solid #e2e8f0', color: 'var(--color-danger)' }}>
-                        <td style={{ padding: '10px 8px' }}>
-                          <strong>Late Payment Fines & Accrued Penalties</strong><br />
-                          <span style={{ fontSize: '10px', color: '#ef4444' }}>Imposed daily rate after grace days limit</span>
-                        </td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right' }}>Accrued penalty</td>
-                        <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: '600' }}>+{formatCurrency(viewingInvoice.fineAmount)}</td>
-                      </tr>
-                    )}
+
                   </tbody>
                 </table>
 
@@ -1477,10 +1288,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                   'Owner': viewingInvoice.ownerName,
                   'Renter': viewingInvoice.renterName || '',
                   'Maintenance (₹)': viewingInvoice.maintenanceFee,
-                  'Water Charge (₹)': viewingInvoice.waterUsageCharge,
                   'Other Charge (₹)': viewingInvoice.otherMaintenanceCharge,
                   'Transfer Fee (₹)': viewingInvoice.transferFee,
-                  'Fine (₹)': viewingInvoice.fineAmount,
                   'Total (₹)': viewingInvoice.totalAmount,
                   'Due Date': viewingInvoice.dueDate,
                   'Status': viewingInvoice.status,

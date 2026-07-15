@@ -1,0 +1,14 @@
+{
+  "name": "fip_payment_reminder",
+  "language": "en",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "Dear {{1}}, your maintenance payment is due in {{2}} days. Invoice {{3}}, amount Rs.{{4}}, due {{5}}. Pay before the due date to avoid a late fine.",
+      "example": {
+        "body_text": [["Vijay Bhai", "3", "KIN-2026-0001", "720", "25 Jun 2026"]]
+      }
+    }
+  ]
+}

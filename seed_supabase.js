@@ -8,10 +8,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const INITIAL_SETTINGS = {
   id: 1,
   default_maintenance: 0,
-  water_rate: 0,
   transfer_fee: 0,
-  grace_period_days: 0,
-  fine_per_day: 0,
   upi_id: '',
   qr_image_url: '',
   society_name: '',

@@ -1,12 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { ChevronLeft, ChevronRight, Check, AlertTriangle, Droplet, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check, AlertTriangle } from 'lucide-react';
 import type { Shade, Owner, Invoice, SystemSettings } from '../types';
 
 interface ShadeEntry {
   shade: Shade;
-  newWaterReading: number;
-  waterSkipped: boolean;
   otherName: string;
   otherCharge: number;
 }
@@ -22,7 +20,6 @@ interface BulkInvoiceModalProps {
   onGenerateSingleInvoice: (
     shadeId: string,
     dueDate: string,
-    newWaterReading: number,
     otherName: string,
     otherCharge: number,
     billingMonths: number,
@@ -53,27 +50,26 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
   const [currentIdx, setCurrentIdx] = useState(0);
   const [dueDate] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() + settings.gracePeriodDays);
+    d.setDate(d.getDate() + 15);
     return d.toISOString().split('T')[0];
   });
   const [dueDateInput, setDueDateInput] = useState(dueDate);
-  const [billingMonths, setBillingMonths] = useState(2);
+  const billingMonths = 12;
   const [generating, setGenerating] = useState(false);
   const [generated, setGenerated] = useState(false);
   const [generateError, setGenerateError] = useState('');
-  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
-  // Shades with a non-cancelled invoice generated within the chosen billing window
+  // Shades with a non-cancelled invoice generated within the chosen billing window (1 year)
   const recentlyBilledIds = useMemo(() => {
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - billingMonths * 30);
+    cutoff.setFullYear(cutoff.getFullYear() - 1);
     const cutoffStr = cutoff.toISOString().split('T')[0];
     return new Set(
       invoices
         .filter(inv => inv.status !== 'cancelled' && inv.generatedDate >= cutoffStr)
         .map(inv => inv.shadeId)
     );
-  }, [invoices, billingMonths]);
+  }, [invoices]);
 
   const unbilledShades = useMemo(() =>
     occupiedShades.filter(s => !recentlyBilledIds.has(s.id)),
@@ -107,8 +103,6 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
     if (selectedIds.size === 0) return;
     const initial: ShadeEntry[] = chosenShades.map(shade => ({
       shade,
-      newWaterReading: shade.currentWaterReading || shade.lastWaterReading,
-      waterSkipped: false,
       otherName: '',
       otherCharge: 0,
     }));
@@ -122,16 +116,10 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
   };
 
   const tryNext = () => {
-    const e = entries[currentIdx];
-    if (e.newWaterReading <= e.shade.lastWaterReading && !e.waterSkipped) {
-      setShowSkipConfirm(true);
-      return;
-    }
     moveNext();
   };
 
   const moveNext = () => {
-    setShowSkipConfirm(false);
     if (currentIdx < entries.length - 1) {
       setCurrentIdx(currentIdx + 1);
     } else {
@@ -139,24 +127,15 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
     }
   };
 
-  const handleSkipAndNext = () => {
-    updateEntry(currentIdx, { waterSkipped: true });
-    moveNext();
-  };
-
   const handleGenerate = async () => {
     setGenerating(true);
     setGenerateError('');
     let failed = 0;
     for (const entry of entries) {
-      const waterVal = entry.waterSkipped
-        ? entry.shade.lastWaterReading
-        : entry.newWaterReading;
       try {
         await onGenerateSingleInvoice(
           entry.shade.id,
           dueDateInput,
-          waterVal,
           entry.otherName,
           entry.otherCharge,
           billingMonths,
@@ -175,8 +154,7 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
   };
 
   const current = entries[currentIdx];
-  const maintenance = Math.round((settings.defaultMaintenance / 2) * billingMonths);
-  const skippedCount = entries.filter(e => e.waterSkipped).length;
+  const maintenance = settings.defaultMaintenance;
 
   const modal = (
     <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -199,7 +177,7 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
           {(['select', 'fill', 'review'] as BulkStep[]).map((s, i) => {
             const done = step === 'review' || (step === 'fill' && s === 'select') || (step !== 'select' && i < ['select', 'fill', 'review'].indexOf(step));
             const active = step === s;
-            const labels = ['1. Select Shades', '2. Enter Readings', '3. Review & Generate'];
+            const labels = ['1. Select Shades', '2. Optional Charges', '3. Review & Generate'];
             return (
               <div key={s} style={{ flex: 1, padding: '10px', textAlign: 'center', fontSize: '12px', fontWeight: active ? '700' : '500', color: active ? 'var(--primary)' : done ? '#16a34a' : 'var(--text-muted)', borderBottom: active ? '2px solid var(--primary)' : done ? '2px solid #16a34a' : '2px solid transparent', backgroundColor: active ? 'var(--primary-light)' : 'transparent' }}>
                 {done && !active ? '✓ ' : ''}{labels[i]}
@@ -281,15 +259,6 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
                   <label>Due Date</label>
                   <input type="date" className="form-control" value={dueDateInput} onChange={e => setDueDateInput(e.target.value)} />
                 </div>
-                <div className="form-group" style={{ margin: 0, minWidth: '130px' }}>
-                  <label>Billing Months</label>
-                  <select className="form-control" value={billingMonths} onChange={e => setBillingMonths(Number(e.target.value))}>
-                    <option value={1}>1 Month</option>
-                    <option value={2}>2 Months</option>
-                    <option value={3}>3 Months</option>
-                    <option value={6}>6 Months</option>
-                  </select>
-                </div>
               </div>
 
               {selectedIds.size > 0 ? (
@@ -326,39 +295,6 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
                 </div>
               </div>
 
-              {/* Water reading section */}
-              <div>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                    <div className="form-group" style={{ margin: 0, flex: 1, minWidth: '140px' }}>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Droplet size={14} style={{ color: '#3b82f6' }} />
-                        Last Reading: <strong>{current.shade.lastWaterReading} units</strong>
-                      </label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        placeholder={`Enter new reading (above ${current.shade.lastWaterReading})`}
-                        value={current.newWaterReading || ''}
-                        onChange={e => updateEntry(currentIdx, { newWaterReading: parseInt(e.target.value) || 0, waterSkipped: false })}
-                        min={current.shade.lastWaterReading}
-                        style={{ borderColor: current.waterSkipped ? '#f59e0b' : undefined }}
-                      />
-                    </div>
-                    {current.newWaterReading > current.shade.lastWaterReading && (
-                      <div style={{ padding: '8px 12px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '12px', color: '#1d4ed8', whiteSpace: 'nowrap' }}>
-                        +{current.newWaterReading - current.shade.lastWaterReading} units<br />
-                        <strong>{formatCurrency((current.newWaterReading - current.shade.lastWaterReading) * settings.waterRate)}</strong>
-                      </div>
-                    )}
-                  </div>
-                  {current.waterSkipped && (
-                    <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#d97706', backgroundColor: '#fefce8', padding: '6px 10px', borderRadius: '6px', border: '1px solid #fde68a' }}>
-                      <AlertTriangle size={13} />
-                      Water reading skipped — will bill without water charge
-                    </div>
-                  )}
-              </div>
-
               {/* Other charges */}
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <div className="form-group" style={{ margin: 0, flex: 2, minWidth: '160px' }}>
@@ -382,30 +318,6 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
                   />
                 </div>
               </div>
-
-              {/* Skip confirm popup */}
-              {showSkipConfirm && (
-                <div style={{ padding: '14px', backgroundColor: '#fefce8', border: '2px solid #f59e0b', borderRadius: '10px' }}>
-                  <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', alignItems: 'flex-start' }}>
-                    <AlertTriangle size={18} style={{ color: '#d97706', flexShrink: 0, marginTop: '1px' }} />
-                    <div>
-                      <div style={{ fontWeight: '700', fontSize: '13px', color: '#92400e' }}>Water reading not entered</div>
-                      <div style={{ fontSize: '12px', color: '#b45309', marginTop: '2px' }}>
-                        {current.shade.id} has water supply. You haven't entered a new reading.<br />
-                        If you continue, <strong>water will not be charged</strong> on this invoice.
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowSkipConfirm(false)}>
-                      Go Back & Enter Reading
-                    </button>
-                    <button type="button" className="btn btn-sm" style={{ backgroundColor: '#f59e0b', border: 'none', color: '#fff', fontWeight: '700' }} onClick={handleSkipAndNext}>
-                      Generate Without Water
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -418,12 +330,6 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
                   {generateError}
                 </div>
               )}
-              {skippedCount > 0 && (
-                <div style={{ padding: '10px 14px', backgroundColor: '#fefce8', border: '1px solid #fde68a', borderRadius: '8px', display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: '#92400e' }}>
-                  <AlertTriangle size={16} style={{ flexShrink: 0 }} />
-                  <span><strong>{skippedCount} shade{skippedCount > 1 ? 's' : ''}</strong> will be billed without a water reading.</span>
-                </div>
-              )}
               <div style={{ overflowX: 'auto' }}>
                 <table className="custom-table" style={{ fontSize: '12px' }}>
                   <thead>
@@ -431,59 +337,40 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
                       <th>SHADE</th>
                       <th>OWNER</th>
                       <th>MAINTENANCE</th>
-                      <th>WATER</th>
                       <th>OTHER</th>
                       <th>TOTAL</th>
-                      <th>NOTE</th>
                     </tr>
                   </thead>
                   <tbody>
                     {entries.map(entry => {
-                      const waterUnits = !entry.waterSkipped
-                        ? Math.max(0, entry.newWaterReading - entry.shade.lastWaterReading)
-                        : 0;
-                      const waterCharge = waterUnits * settings.waterRate;
-                      const total = maintenance + waterCharge + entry.otherCharge;
+                      const total = maintenance + entry.otherCharge;
                       return (
                         <tr key={entry.shade.id}>
                           <td><strong style={{ color: 'var(--primary)' }}>{entry.shade.id}</strong></td>
                           <td>{getOwnerName(entry.shade)}</td>
                           <td>{formatCurrency(maintenance)}</td>
-                          <td style={{ color: waterCharge > 0 ? '#1d4ed8' : 'var(--text-muted)' }}>
-                            {waterCharge > 0 ? formatCurrency(waterCharge) : '—'}
-                          </td>
                           <td style={{ color: entry.otherCharge > 0 ? '#d97706' : 'var(--text-muted)' }}>
                             {entry.otherCharge > 0 ? formatCurrency(entry.otherCharge) : '—'}
                           </td>
                           <td><strong>{formatCurrency(total)}</strong></td>
-                          <td>
-                            {entry.waterSkipped && (
-                              <span style={{ color: '#d97706', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                                <AlertTriangle size={10} /> No reading
-                              </span>
-                            )}
-                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                   <tfoot>
                     <tr style={{ backgroundColor: 'var(--bg-main)', fontWeight: '700' }}>
-                      <td colSpan={5} style={{ textAlign: 'right', padding: '10px 12px' }}>Grand Total ({entries.length} invoices):</td>
+                      <td colSpan={4} style={{ textAlign: 'right', padding: '10px 12px' }}>Grand Total ({entries.length} invoices):</td>
                       <td style={{ padding: '10px 12px' }}>
                         {formatCurrency(entries.reduce((sum, entry) => {
-                          const waterUnits = !entry.waterSkipped
-                            ? Math.max(0, entry.newWaterReading - entry.shade.lastWaterReading) : 0;
-                          return sum + maintenance + (waterUnits * settings.waterRate) + entry.otherCharge;
+                          return sum + maintenance + entry.otherCharge;
                         }, 0))}
                       </td>
-                      <td />
                     </tr>
                   </tfoot>
                 </table>
               </div>
               <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', fontSize: '13px', color: '#1e40af' }}>
-                Due date: <strong>{dueDateInput}</strong> · Billing period: <strong>{billingMonths} month{billingMonths > 1 ? 's' : ''}</strong> · Status: <strong>Draft</strong>
+                Due date: <strong>{dueDateInput}</strong> · Billing period: <strong>1 Year</strong> · Status: <strong>Draft</strong>
               </div>
             </div>
           )}
@@ -513,14 +400,13 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
                     disabled={selectedIds.size === 0}
                     onClick={startFillStep}
                   >
-                    Next: Enter Readings <ChevronRight size={16} />
+                    Next: Optional Charges <ChevronRight size={16} />
                   </button>
                 </>
               )}
               {step === 'fill' && (
                 <>
                   <button type="button" className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '4px' }} onClick={() => {
-                    setShowSkipConfirm(false);
                     if (currentIdx > 0) setCurrentIdx(currentIdx - 1);
                     else setStep('select');
                   }}>
@@ -544,7 +430,7 @@ export const BulkInvoiceModal: React.FC<BulkInvoiceModalProps> = ({
               {step === 'review' && (
                 <>
                   <button type="button" className="btn btn-secondary" onClick={() => { setCurrentIdx(entries.length - 1); setStep('fill'); }}>
-                    <ChevronLeft size={16} /> Edit Readings
+                    <ChevronLeft size={16} /> Edit Charges
                   </button>
                   <button
                     type="button"

@@ -21,10 +21,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onSubmitRequest
 }) => {
   const [defaultMaintenance, setDefaultMaintenance] = useState(settings.defaultMaintenance);
-  const [waterRate, setWaterRate] = useState(settings.waterRate);
   const [transferFee, setTransferFee] = useState(settings.transferFee);
-  const [gracePeriodDays, setGracePeriodDays] = useState(settings.gracePeriodDays);
-  const [finePerDay, setFinePerDay] = useState(settings.finePerDay);
   const [upiId, setUpiId] = useState(settings.upiId);
   
   const [societyName, setSocietyName] = useState(settings.societyName || '');
@@ -48,10 +45,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // Sync when Supabase loads real settings after initial render
   React.useEffect(() => {
     setDefaultMaintenance(settings.defaultMaintenance);
-    setWaterRate(settings.waterRate);
     setTransferFee(settings.transferFee);
-    setGracePeriodDays(settings.gracePeriodDays);
-    setFinePerDay(settings.finePerDay);
     setUpiId(settings.upiId || '');
     setSocietyName(settings.societyName || '');
     setSocietyAddress(settings.societyAddress || '');
@@ -73,10 +67,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
     const payload = {
       defaultMaintenance,
-      waterRate,
       transferFee,
-      gracePeriodDays,
-      finePerDay,
       upiId,
       qrImageUrl: settings.qrImageUrl,
       societyName,
@@ -97,10 +88,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } else {
       const changesList: string[] = [];
       if (settings.defaultMaintenance !== defaultMaintenance) changesList.push(`Default Maintenance: ₹${settings.defaultMaintenance} → ₹${defaultMaintenance}`);
-      if (settings.waterRate !== waterRate) changesList.push(`Water Rate: ₹${settings.waterRate} → ₹${waterRate}`);
       if (settings.transferFee !== transferFee) changesList.push(`Transfer Fee: ₹${settings.transferFee} → ₹${transferFee}`);
-      if (settings.gracePeriodDays !== gracePeriodDays) changesList.push(`Grace Period: ${settings.gracePeriodDays} days → ${gracePeriodDays} days`);
-      if (settings.finePerDay !== finePerDay) changesList.push(`Fine Per Day: ₹${settings.finePerDay} → ₹${finePerDay}`);
       if ((settings.upiId || '') !== upiId) changesList.push(`UPI ID: "${settings.upiId || ''}" → "${upiId}"`);
       if ((settings.societyName || '') !== societyName) changesList.push(`Society Name: "${settings.societyName || ''}" → "${societyName}"`);
       if ((settings.societyAddress || '') !== societyAddress) changesList.push(`Society Address: "${settings.societyAddress || ''}" → "${societyAddress}"`);
@@ -231,76 +219,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <h4 style={{ fontSize: '14px', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px', marginTop: '24px', color: 'var(--primary)' }}>Billing Parameters</h4>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Default Maintenance Fee (per 2 months)*</label>
-                  <input 
-                    type="number" 
-                    className="form-control"
-                    value={defaultMaintenance}
-                    onChange={(e) => setDefaultMaintenance(parseInt(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Water Rate (₹ per unit)*</label>
-                  <input 
-                    type="number" 
-                    className="form-control"
-                    value={waterRate}
-                    onChange={(e) => setWaterRate(parseInt(e.target.value) || 0)}
-                    required
-                  />
-                </div>
+              <div className="form-group">
+                <label>Default Yearly Maintenance Fee (₹)*</label>
+                <input 
+                  type="number" 
+                  className="form-control"
+                  value={defaultMaintenance}
+                  onChange={(e) => setDefaultMaintenance(parseInt(e.target.value) || 0)}
+                  required
+                />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>One-time Owner Transfer Fee (₹)*</label>
-                  <input 
-                    type="number" 
-                    className="form-control"
-                    value={transferFee}
-                    onChange={(e) => setTransferFee(parseInt(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Late Fee Grace Period (days)*</label>
-                  <input 
-                    type="number" 
-                    className="form-control"
-                    value={gracePeriodDays}
-                    onChange={(e) => setGracePeriodDays(parseInt(e.target.value) || 0)}
-                    required
-                  />
-                </div>
+              <div className="form-group">
+                <label>One-time Owner Transfer Fee (₹)*</label>
+                <input 
+                  type="number" 
+                  className="form-control"
+                  value={transferFee}
+                  onChange={(e) => setTransferFee(parseInt(e.target.value) || 0)}
+                  required
+                />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Late Payment Penalty (₹ per day)*</label>
-                  <input 
-                    type="number" 
-                    className="form-control"
-                    value={finePerDay}
-                    onChange={(e) => setFinePerDay(parseInt(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label>Community Society UPI ID*</label>
-                  <input 
-                    type="text" 
-                    className="form-control"
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    required
-                  />
-                </div>
+              <div className="form-group">
+                <label>Community Society UPI ID*</label>
+                <input 
+                  type="text" 
+                  className="form-control"
+                  value={upiId}
+                  onChange={(e) => setUpiId(e.target.value)}
+                  required
+                />
               </div>
 
               <h4 style={{ fontSize: '14px', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px', marginTop: '24px', color: 'var(--primary)' }}>Dashboard & Analytics</h4>
