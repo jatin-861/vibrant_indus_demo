@@ -1747,7 +1747,7 @@ export default function App() {
               {overdueCount > 0 && <span className="badge-dot"></span>}
             </div>
 
-            {/* User Profile Card */}
+            {/* User Profile Card with Role Switcher */}
             <div
               className="user-profile-header"
               style={{
@@ -1771,15 +1771,57 @@ export default function App() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: '700',
-                  fontSize: '13px'
+                  fontSize: '13px',
+                  flexShrink: 0
                 }}
               >
                 {currentAdmin.avatar}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', fontSize: '12px' }}>
                 <strong style={{ color: 'var(--text-primary)', fontWeight: '700', lineHeight: '1.2' }}>{currentAdmin.name}</strong>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '10px' }}>{currentAdmin.email}</span>
+                <select
+                  value={currentAdmin.id}
+                  onChange={(e) => {
+                    const sel = ADMINS.find(a => a.id === e.target.value);
+                    if (sel) {
+                      setCurrentAdmin(sel);
+                      addToast(`Switched to: ${sel.name} (${sel.role})`, 'info');
+                    }
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    fontSize: '11px',
+                    padding: 0,
+                    cursor: 'pointer',
+                    outline: 'none',
+                    fontWeight: '600',
+                    color: currentAdmin.role === 'Admin' ? 'var(--color-success)' :
+                           currentAdmin.role === 'Secretary' ? 'var(--color-info)' : 'var(--color-pending)'
+                  }}
+                >
+                  {ADMINS.map(a => (
+                    <option key={a.id} value={a.id} style={{ backgroundColor: '#ffffff', color: 'var(--text-primary)' }}>
+                      {a.name} — {a.role}
+                    </option>
+                  ))}
+                </select>
               </div>
+              {/* Role badge */}
+              <span style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                padding: '2px 8px',
+                borderRadius: '999px',
+                backgroundColor: currentAdmin.role === 'Admin' ? 'var(--color-success-bg)' :
+                                 currentAdmin.role === 'Secretary' ? 'var(--color-info-bg)' : 'var(--color-pending-bg)',
+                color: currentAdmin.role === 'Admin' ? 'var(--color-success)' :
+                       currentAdmin.role === 'Secretary' ? 'var(--color-info)' : 'var(--color-pending)',
+                letterSpacing: '0.3px',
+                whiteSpace: 'nowrap'
+              }}>
+                {currentAdmin.role}
+              </span>
             </div>
           </div>
         </header>
