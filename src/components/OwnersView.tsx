@@ -408,7 +408,7 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
               </div>
 
               {/* Owner and Renter columns */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div className="owner-renter-grid">
                 
                 {/* OWNER BLOCK */}
                 <div style={{ padding: '16px', borderRadius: '8px', border: '1px solid rgba(0, 0, 0, 0.05)', backgroundColor: 'rgba(59, 130, 246, 0.03)' }}>

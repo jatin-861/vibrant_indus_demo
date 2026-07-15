@@ -2753,3 +2753,95 @@ html, body {
     font-size: 14px;
   }
 }
+
+/* ============================================================
+   OWNER-RENTER GRID - Responsive
+   ============================================================ */
+.owner-renter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 640px) {
+  .owner-renter-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+/* ============================================================
+   PREVENT ALL INLINE OVERFLOW - nuclear option for containers
+   ============================================================ */
+.view-canvas > * {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Shade cards grid container forced to single column on small screens */
+@media (max-width: 640px) {
+  /* OwnersView shade listing */
+  [style*="gridTemplateColumns: '1fr 1fr'"],
+  [style*='gridTemplateColumns: "1fr 1fr"'] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Invoices generate modal grid */
+  .modal-body [style*="1.2fr 1fr"],
+  .modal-body [style*="1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Shade-card action buttons on mobile */
+@media (max-width: 640px) {
+  .shade-card-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .shade-card-footer > div:last-child {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .shade-card-footer .btn {
+    flex: 1 1 auto;
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+}
+
+/* Header: on mobile hide role badge when too cramped */
+@media (max-width: 480px) {
+  .user-profile-header {
+    display: none !important;
+  }
+}
+
+/* Tables: ensure horizontal scroll within container, never overflow page */
+.table-container {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+/* Fix card-header flex wrapping for long titles + buttons */
+@media (max-width: 768px) {
+  .card-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .card-header h3 {
+    font-size: 14px;
+  }
+  /* Fix invoices/payments table action button columns */
+  .custom-table .btn-sm,
+  .custom-table .btn-xs {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}

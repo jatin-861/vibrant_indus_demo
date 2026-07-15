@@ -1340,7 +1340,7 @@ export default function App() {
               animation: 'pulseRing 2s cubic-bezier(0.4, 0, 0.6, 1) infinite'
             }} />
             <img
-              src="/vibrant_favicon.png"
+              src="/favicon.png"
               alt="Vibrant Industrial Park Logo"
               style={{
                 width: '72px',
@@ -1469,8 +1469,8 @@ export default function App() {
       <aside className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}>
         <div className="sidebar-brand" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexGrow: 1 }}>
-            <div className="brand-icon">
-              <LayoutDashboard size={20} />
+            <div className="brand-icon" style={{ padding: 0, overflow: 'hidden', background: 'none', boxShadow: 'none', border: '1px solid var(--border-color)' }}>
+              <img src="/favicon.png" alt="Logo" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: 'var(--radius-md)', display: 'block' }} />
             </div>
             <div className="brand-info">
               <h2>Vibrant Industrial Park</h2>
