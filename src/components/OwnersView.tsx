@@ -6,7 +6,6 @@ import {
   Phone,
   Mail,
   RefreshCw,
-  MessageSquare,
   Building,
   User,
   Users,
@@ -37,8 +36,10 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
   onAddOwner,
   onUpdateOwner,
   onTransferOwner,
-  setActiveTab,
-  onSelectShadeForChat,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  setActiveTab: _setActiveTab,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  onSelectShadeForChat: _onSelectShadeForChat,
   transferShadeId,
   onCloseTransferModal,
   onBulkImportOwners,
