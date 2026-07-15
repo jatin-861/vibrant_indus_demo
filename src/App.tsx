@@ -1825,6 +1825,7 @@ export default function App() {
               transferShadeId={transferShadeId}
               onCloseTransferModal={() => setTransferShadeId(null)}
               onBulkImportOwners={handleBulkImportOwners}
+              currentRole={currentAdmin.role}
             />
           )}
 
@@ -1842,6 +1843,7 @@ export default function App() {
               preselectedShadeId={preselectedShadeId}
               clearPreselectedShadeId={() => setPreselectedShadeId(null)}
               onBulkImportInvoices={handleBulkImportInvoices}
+              currentRole={currentAdmin.role}
             />
           )}
 
@@ -1853,8 +1855,9 @@ export default function App() {
               onRecordPayment={handleRecordPayment}
               onDeletePayment={handleDeletePayment}
               onBulkImportPayments={handleBulkImportPayments}
+              currentRole={currentAdmin.role}
             />
-          )}
+          ) }
 
 
 

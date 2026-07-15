@@ -340,12 +340,16 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
           <button className="btn btn-secondary" onClick={handleExportCSV}>
             <Upload size={16} style={{ transform: 'rotate(180deg)' }} /> Export CSV
           </button>
-          <button className="btn btn-secondary" onClick={() => setIsImportModalOpen(true)}>
-            <Upload size={16} /> Import Excel / CSV
-          </button>
-          <button className="btn btn-primary" onClick={() => { setNewDocuments([]); setIsAddModalOpen(true); }}>
-            <Plus size={16} /> Add Shade
-          </button>
+          {currentRole === 'Admin' && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setIsImportModalOpen(true)}>
+                <Upload size={16} /> Import Excel / CSV
+              </button>
+              <button className="btn btn-primary" onClick={() => { setNewDocuments([]); setIsAddModalOpen(true); }}>
+                <Plus size={16} /> Add Shade
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -407,7 +411,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '12px', width: '100%' }}>
-                  {s.status === 'occupied' && (
+                  {currentRole === 'Admin' && s.status === 'occupied' && (
                     <button
                       className="btn btn-primary btn-sm"
                       title="Generate Invoice for this unit"
@@ -417,7 +421,7 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
                       <FileText size={12} /> Bill
                     </button>
                   )}
-                  {s.status === 'occupied' && (
+                  {currentRole === 'Admin' && s.status === 'occupied' && (
                     <button
                       className="btn btn-secondary btn-sm"
                       title="Transfer Ownership or Renter"
@@ -687,13 +691,15 @@ export const ShadesView: React.FC<ShadesViewProps> = ({
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setViewingShade(null)}>Close</button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => { setEditingShade(viewingShade); setViewingShade(null); }}
-              >
-                <Edit2 size={14} /> Edit Shade
-              </button>
+              {currentRole === 'Admin' && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => { setEditingShade(viewingShade); setViewingShade(null); }}
+                >
+                  <Edit2 size={14} /> Edit Shade
+                </button>
+              )}
             </div>
           </div>
         </div>

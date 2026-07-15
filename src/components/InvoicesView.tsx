@@ -33,6 +33,7 @@ interface InvoicesViewProps {
   preselectedShadeId?: string | null;
   clearPreselectedShadeId?: () => void;
   onBulkImportInvoices?: (invoices: Invoice[]) => void;
+  currentRole: 'Admin' | 'Secretary' | 'Treasurer';
 }
 
 export const InvoicesView: React.FC<InvoicesViewProps> = ({
@@ -47,7 +48,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
   onUpdateInvoice,
   preselectedShadeId,
   clearPreselectedShadeId,
-  onBulkImportInvoices
+  onBulkImportInvoices,
+  currentRole
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -346,17 +348,23 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
             <Download size={16} /> Export Invoices
           </button>
 
-          <label className="btn btn-secondary" style={{ cursor: 'pointer', margin: 0 }}>
-            Import Excel / CSV
-            <input type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={handleImportCSV} />
-          </label>
+          {currentRole === 'Admin' && (
+            <label className="btn btn-secondary" style={{ cursor: 'pointer', margin: 0 }}>
+              Import Excel / CSV
+              <input type="file" accept=".csv,.xlsx,.xls" style={{ display: 'none' }} onChange={handleImportCSV} />
+            </label>
+          )}
 
-          <button className="btn btn-secondary" onClick={() => setIsBulkGenOpen(true)}>
-            <Plus size={16} /> Bulk Generate
-          </button>
-          <button className="btn btn-primary" onClick={() => setIsSingleGenOpen(true)}>
-            <Plus size={16} /> Individual Invoice
-          </button>
+          {currentRole === 'Admin' && (
+            <button className="btn btn-secondary" onClick={() => setIsBulkGenOpen(true)}>
+              <Plus size={16} /> Bulk Generate
+            </button>
+          )}
+          {currentRole === 'Admin' && (
+            <button className="btn btn-primary" onClick={() => setIsSingleGenOpen(true)}>
+              <Plus size={16} /> Individual Invoice
+            </button>
+          )}
         </div>
       </div>
 
@@ -451,7 +459,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                         </td>
                         <td>
                           <div style={{ display: 'flex', gap: '4px' }}>
-                            {inv.status !== 'paid' && inv.status !== 'cancelled' && (
+                            {currentRole === 'Admin' && inv.status !== 'paid' && inv.status !== 'cancelled' && (
                               <button
                                 className="btn btn-success btn-sm"
                                 title="Generate Payment Receipt"
@@ -470,22 +478,26 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({
                             >
                               <FileText size={12} /> View
                             </button>
-                            <button
-                              className="btn btn-secondary btn-sm"
-                              title="Edit Invoice Details"
-                              onClick={() => { setEditingInvoice(inv); setOriginalInvoiceId(inv.id); }}
-                              style={{ padding: '4px 8px' }}
-                            >
-                              <Edit2 size={12} /> Edit
-                            </button>
-                            <button
-                              className="btn btn-secondary btn-sm text-danger"
-                              title="Cancel Invoice"
-                              onClick={() => { if (confirm(`Are you sure you want to cancel invoice ${inv.id}?`)) onDeleteInvoice(inv.id); }}
-                              style={{ padding: '4px 8px' }}
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                            {currentRole === 'Admin' && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                title="Edit Invoice Details"
+                                onClick={() => { setEditingInvoice(inv); setOriginalInvoiceId(inv.id); }}
+                                style={{ padding: '4px 8px' }}
+                              >
+                                <Edit2 size={12} /> Edit
+                              </button>
+                            )}
+                            {currentRole === 'Admin' && (
+                              <button
+                                className="btn btn-secondary btn-sm text-danger"
+                                title="Cancel Invoice"
+                                onClick={() => { if (confirm(`Are you sure you want to cancel invoice ${inv.id}?`)) onDeleteInvoice(inv.id); }}
+                                style={{ padding: '4px 8px' }}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

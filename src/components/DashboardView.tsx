@@ -455,7 +455,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               {/* Divider line */}
-              <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '20px', paddingTop: '16px', display: 'flex', gap: '24px' }}>
+              <div style={{ borderTop: '1px solid var(--border-color)', marginTop: '20px', paddingTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
                 {/* Collection donut */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ position: 'relative', width: '54px', height: '54px', flexShrink: 0 }}>
@@ -552,7 +552,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
 
               {/* Legend below progress */}
-              <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', gap: '8px', fontSize: '11px', marginTop: '8px' }}>
+              <div style={{ width: '100%', display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '12px', fontSize: '11px', marginTop: '8px' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}>
                   <span style={{ width: '8px', height: '8px', backgroundColor: 'var(--primary)', borderRadius: '50%' }}></span>
                   Occupied ({occupiedCount})
@@ -585,8 +585,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <ul style={{ listStyle: 'none', padding: '0', margin: '0' }}>
                 {invoices.filter(i => i.status !== 'cancelled').slice(-3).reverse().map(inv => (
                   <li key={inv.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f1f5f9' }}>
-                    <div>
-                      <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-primary)' }}>{inv.renterName || inv.ownerName}</strong>
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: '8px' }}>
+                      <strong style={{ display: 'block', fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.renterName || inv.ownerName}</strong>
                       <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
                         Shade {inv.shadeId} • Due {inv.dueDate}
                       </span>

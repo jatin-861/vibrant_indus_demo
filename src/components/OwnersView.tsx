@@ -28,6 +28,7 @@ interface OwnersViewProps {
   transferShadeId: string | null;
   onCloseTransferModal: () => void;
   onBulkImportOwners: (owners: Owner[]) => void;
+  currentRole: 'Admin' | 'Secretary' | 'Treasurer';
 }
 
 export const OwnersView: React.FC<OwnersViewProps> = ({
@@ -40,7 +41,8 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
   onSelectShadeForChat,
   transferShadeId,
   onCloseTransferModal,
-  onBulkImportOwners
+  onBulkImportOwners,
+  currentRole
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'occupied' | 'owner_only' | 'maintenance'>('all');
@@ -345,17 +347,21 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
             <Upload size={16} style={{ transform: 'rotate(180deg)' }} /> Export CSV
           </button>
           
-          <button className="btn btn-secondary" onClick={() => setIsImportModalOpen(true)}>
-            <Upload size={16} /> Import Excel / CSV
-          </button>
-
-          <button className="btn btn-danger" onClick={() => setIsTransferModalOpen(true)}>
-            <RefreshCw size={16} /> Transfer / Assign Member
-          </button>
-          
-          <button className="btn btn-primary" onClick={() => setIsAddModalOpen(true)}>
-            <Plus size={16} /> Add Member Contact
-          </button>
+          {currentRole === 'Admin' && (
+            <>
+              <button className="btn btn-secondary" onClick={() => setIsImportModalOpen(true)}>
+                <Upload size={16} /> Import Excel / CSV
+              </button>
+              
+              <button className="btn btn-danger" onClick={() => setIsTransferModalOpen(true)}>
+                <RefreshCw size={16} /> Transfer / Assign Member
+              </button>
+              
+              <button className="btn btn-primary" onClick={() => setIsAddModalOpen(true)}>
+                <Plus size={16} /> Add Member Contact
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -386,16 +392,18 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                     {s.status}
                   </span>
                   
-                  <button 
-                    className="btn btn-danger btn-sm" 
-                    title="Transfer Ownership or Renter"
-                    onClick={() => {
-                      setSelectedShadeId(s.id);
-                      setIsTransferModalOpen(true);
-                    }}
-                  >
-                    <RefreshCw size={12} /> Transfer
-                  </button>
+                  {currentRole === 'Admin' && (
+                    <button 
+                      className="btn btn-danger btn-sm" 
+                      title="Transfer Ownership or Renter"
+                      onClick={() => {
+                        setSelectedShadeId(s.id);
+                        setIsTransferModalOpen(true);
+                      }}
+                    >
+                      <RefreshCw size={12} /> Transfer
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -408,7 +416,7 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                     <h4 style={{ margin: '0', fontSize: '14px', fontWeight: '700', color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <User size={16} /> Owner (Landlord)
                     </h4>
-                    {owner && (
+                    {currentRole === 'Admin' && owner && (
                       <button 
                         className="btn btn-secondary btn-xs"
                         onClick={() => setEditingOwner(owner)}
@@ -447,16 +455,18 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', color: 'var(--text-muted)', fontSize: '13px', border: '1px dashed #cbd5e1', borderRadius: '6px' }}>
                       No Owner Assigned
-                      <button 
-                        className="btn btn-primary btn-xs"
-                        style={{ marginTop: '8px' }}
-                        onClick={() => {
-                          setSelectedShadeId(s.id);
-                          setIsTransferModalOpen(true);
-                        }}
-                      >
-                        Assign Owner
-                      </button>
+                      {currentRole === 'Admin' && (
+                        <button 
+                          className="btn btn-primary btn-xs"
+                          style={{ marginTop: '8px' }}
+                          onClick={() => {
+                            setSelectedShadeId(s.id);
+                            setIsTransferModalOpen(true);
+                          }}
+                        >
+                          Assign Owner
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -467,7 +477,7 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                     <h4 style={{ margin: '0', fontSize: '14px', fontWeight: '700', color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '6px' }}>
                       <Users size={16} /> Renter (Tenant)
                     </h4>
-                    {renter && (
+                    {currentRole === 'Admin' && renter && (
                       <button 
                         className="btn btn-secondary btn-xs"
                         onClick={() => setEditingOwner(renter)}
@@ -506,16 +516,18 @@ export const OwnersView: React.FC<OwnersViewProps> = ({
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100px', color: 'var(--text-muted)', fontSize: '13px', border: '1px dashed #cbd5e1', borderRadius: '6px' }}>
                       Vacant / No Tenant
-                      <button 
-                        className="btn btn-primary btn-xs"
-                        style={{ marginTop: '8px' }}
-                        onClick={() => {
-                          setSelectedShadeId(s.id);
-                          setIsTransferModalOpen(true);
-                        }}
-                      >
-                        Assign Tenant
-                      </button>
+                      {currentRole === 'Admin' && (
+                        <button 
+                          className="btn btn-primary btn-xs"
+                          style={{ marginTop: '8px' }}
+                          onClick={() => {
+                            setSelectedShadeId(s.id);
+                            setIsTransferModalOpen(true);
+                          }}
+                        >
+                          Assign Tenant
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

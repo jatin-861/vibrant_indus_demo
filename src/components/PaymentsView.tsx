@@ -10,6 +10,7 @@ interface PaymentsViewProps {
   onRecordPayment: (payment: Omit<Payment, 'id'>) => void;
   onDeletePayment: (paymentId: string) => void;
   onBulkImportPayments: (newPayments: Omit<Payment, 'id'>[]) => void;
+  currentRole: 'Admin' | 'Secretary' | 'Treasurer';
 }
 
 export const PaymentsView: React.FC<PaymentsViewProps> = ({
@@ -18,7 +19,8 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
   currentDate,
   onRecordPayment,
   onDeletePayment,
-  onBulkImportPayments
+  onBulkImportPayments,
+  currentRole
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
@@ -237,24 +239,30 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
         </div>
         
         <div className="tools-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <button className="btn btn-secondary btn-sm" title="Download sample import CSV template" onClick={downloadSampleTemplate}>
-            <FileText size={14} /> Template
-          </button>
+          {currentRole === 'Admin' && (
+            <button className="btn btn-secondary btn-sm" title="Download sample import CSV template" onClick={downloadSampleTemplate}>
+              <FileText size={14} /> Template
+            </button>
+          )}
           <button className="btn btn-secondary btn-sm" title="Export payments to Excel" onClick={exportToExcel}>
             <Download size={14} /> Export
           </button>
-          <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }} title="Import payments from Excel/CSV">
-            <Upload size={14} /> Import
-            <input 
-              type="file" 
-              accept=".csv,.xlsx,.xls" 
-              style={{ display: 'none' }} 
-              onChange={handleImportFile} 
-            />
-          </label>
-          <button className="btn btn-primary" onClick={() => setIsRecordModalOpen(true)}>
-            <Plus size={16} /> Receipt Payment
-          </button>
+          {currentRole === 'Admin' && (
+            <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }} title="Import payments from Excel/CSV">
+              <Upload size={14} /> Import
+              <input 
+                type="file" 
+                accept=".csv,.xlsx,.xls" 
+                style={{ display: 'none' }} 
+                onChange={handleImportFile} 
+              />
+            </label>
+          )}
+          {currentRole === 'Admin' && (
+            <button className="btn btn-primary" onClick={() => setIsRecordModalOpen(true)}>
+              <Plus size={16} /> Receipt Payment
+            </button>
+          )}
         </div>
       </div>
 
@@ -358,28 +366,32 @@ export const PaymentsView: React.FC<PaymentsViewProps> = ({
                 </td>
                 <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>{p.reference}</td>
                 <td>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button 
-                      className="btn btn-secondary btn-sm"
-                      title="Edit Transaction Receipt"
-                      onClick={() => alert('Editing logged transaction...')}
-                      style={{ padding: '4px' }}
-                    >
-                      <Edit2 size={12} />
-                    </button>
-                    <button 
-                      className="btn btn-secondary btn-sm text-danger"
-                      title="Delete Transaction Receipt"
-                      onClick={() => {
-                        if (confirm('Are you sure you want to delete this payment receipt? This does not alter invoice state.')) {
-                          onDeletePayment(p.id);
-                        }
-                      }}
-                      style={{ padding: '4px' }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
+                  {currentRole === 'Admin' ? (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        className="btn btn-secondary btn-sm"
+                        title="Edit Transaction Receipt"
+                        onClick={() => alert('Editing logged transaction...')}
+                        style={{ padding: '4px' }}
+                      >
+                        <Edit2 size={12} />
+                      </button>
+                      <button 
+                        className="btn btn-secondary btn-sm text-danger"
+                        title="Delete Transaction Receipt"
+                        onClick={() => {
+                          if (confirm('Are you sure you want to delete this payment receipt? This does not alter invoice state.')) {
+                            onDeletePayment(p.id);
+                          }
+                        }}
+                        style={{ padding: '4px' }}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: '11px', fontWeight: '500' }}>Read-only</span>
+                  )}
                 </td>
               </tr>
             ))}

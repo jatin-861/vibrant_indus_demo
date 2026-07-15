@@ -134,7 +134,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             )}
 
             <form onSubmit={handleSave}>
-              <h4 style={{ fontSize: '14px', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px', color: 'var(--primary)' }}>Invoice Header & Company Profile Settings</h4>
+              <fieldset style={{ border: 'none', padding: 0, margin: 0 }} disabled={currentRole !== 'Admin'}>
+                <h4 style={{ fontSize: '14px', fontWeight: '700', borderBottom: '1px solid var(--border-color)', paddingBottom: '8px', marginBottom: '16px', color: 'var(--primary)' }}>Invoice Header & Company Profile Settings</h4>
               
               <div className="form-row">
                 <div className="form-group">
@@ -288,44 +289,40 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </span>
               </div>
 
-              <button type="submit" className="btn btn-primary" style={{ marginTop: '12px' }}>
-                <Save size={16} /> {currentRole === 'Admin' ? 'Save Configurations' : 'Submit Config Request to Admin'}
-              </button>
+              </fieldset>
+              {currentRole === 'Admin' && (
+                <button type="submit" className="btn btn-primary" style={{ marginTop: '12px' }}>
+                  <Save size={16} /> Save Configurations
+                </button>
+              )}
             </form>
           </div>
         </div>
 
         {/* Database Reset */}
-        <div className="card">
-          <div className="card-header" style={{ borderBottomColor: 'rgba(239, 68, 68, 0.2)' }}>
-            <h3 style={{ color: 'var(--color-danger)' }}>Database Reset</h3>
-          </div>
-          <div className="card-body">
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
-              Reset all database configurations to clean defaults. This clears all readings, invoices, and resets all data.
-            </p>
-            <button 
-              className="btn btn-danger"
-              type="button"
-              onClick={() => {
-                if (currentRole === 'Admin') {
+        {currentRole === 'Admin' && (
+          <div className="card">
+            <div className="card-header" style={{ borderBottomColor: 'rgba(239, 68, 68, 0.2)' }}>
+              <h3 style={{ color: 'var(--color-danger)' }}>Database Reset</h3>
+            </div>
+            <div className="card-body">
+              <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                Reset all database configurations to clean defaults. This clears all readings, invoices, and resets all data.
+              </p>
+              <button 
+                className="btn btn-danger"
+                type="button"
+                onClick={() => {
                   if (confirm('Are you sure you want to reset all data? This clears all invoices and readings.')) {
                     onResetDatabase();
                   }
-                } else {
-                  onSubmitRequest(
-                    'reset_db',
-                    'Requested a complete system database reset to clean default values.',
-                    {}
-                  );
-                  alert('Database reset request submitted to Admin for approval.');
-                }
-              }}
-            >
-              <RefreshCw size={16} /> {currentRole === 'Admin' ? 'Reset Database' : 'Submit Reset Request to Admin'}
-            </button>
+                }}
+              >
+                <RefreshCw size={16} /> Reset Database
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
